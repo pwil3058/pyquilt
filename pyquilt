@@ -21,10 +21,8 @@ Implimentation of quilt using the Python programming language
 
 import sys
 
-from pyquilt_pkg import shell
 from pyquilt_pkg import customization
 from pyquilt_pkg import cmd_line
-from pyquilt_pkg import patches
 
 args = cmd_line.PARSER.parse_args()
 
