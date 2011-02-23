@@ -15,7 +15,7 @@
 
 '''Manage quilt customization options'''
 
-import os.path
+import os
 import re
 import sys
 

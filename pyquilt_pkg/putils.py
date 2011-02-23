@@ -272,16 +272,12 @@ def get_patch_diff_fm_text(textbuf):
     lines = textbuf.splitlines(True)
     _, patch = _trisect_patch_lines(lines)
     if patch is None:
-        return (False, '')
-    return (True, ''.join(lines[patch[0]:]))
+        return ''
+    return ''.join(lines[patch[0]:])
 
 def get_patch_diff(path, file_list=None):
     if not file_list:
-        try:
-            buf = fsutils.get_file_contents(path)
-        except IOError:
-            return (False, None)
-        return get_patch_diff_fm_text(buf)
+        return get_patch_diff_fm_text(fsutils.get_file_contents(path))
     if not shell.which("filterdiff"):
         return (False, "This functionality requires \"filterdiff\" from \"patchutils\"")
     cmd = "filterdiff -p 1"

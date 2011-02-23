@@ -20,12 +20,13 @@ Implimentation of quilt using the Python programming language
 '''
 
 import sys
+import os
 
 from pyquilt_pkg import customization
 from pyquilt_pkg import cmd_line
 
 args = cmd_line.PARSER.parse_args()
 
-customization.process_configuration_data(args.quiltrc)
+customization.process_configuration_data(args.quiltrc if args.quiltrc else os.getenv('QUILTRC', None))
 
 sys.exit(args.run_cmd(args))

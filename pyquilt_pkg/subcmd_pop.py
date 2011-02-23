@@ -18,6 +18,7 @@ import os
 import shutil
 import argparse
 import re
+import errno
 
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
@@ -162,19 +163,23 @@ def remove_patch(patch, force, check, silent):
             status = check_for_pending_changes(patch)
         if status is True:
             patchdir = os.path.join(patchfns.QUILT_PC, patch)
-            os.remove(os.path.join(patchdir, '.timestamp'))
-            if not os.listdir(patchdir):
+            try:
+                os.remove(os.path.join(patchdir, '.timestamp'))
+            except OSError:
+                pass
+            if not os.path.exists(patchdir) or not os.listdir(patchdir):
                 sys.stdout.write('Patch %s appears to be empty, removing\n' % patchfns.print_patch(patch))
                 try:
                     os.rmdir(patchdir)
                 except OSError as edata:
-                    status = edata
+                    if edata.errno != errno.ENOENT:
+                        status = edata
             else:
                 sys.stdout.write('Removing patch %s\n' % patchfns.print_patch(patch))
                 status = backup.restore(patchdir, touch=True, verbose=not silent)
             patchfns.remove_from_db(patch)
             try:
-                os.remove(os.path.exists(patchdir + '~refresh'))
+                os.remove(os.path.join(patchdir + '~refresh'))
             except OSError as edata:
                 if edata.errno != errno.ENOENT:
                     status = edata
@@ -190,21 +195,17 @@ def run_pop(args):
         if args.patchnamornum.isdigit():
             number = int(args.patchnamornum)
         else:
-            stop_at_patch = args.patchnamornum
+            stop_at_patch = patchfns.find_unapplied_patch(args.patchnamornum)
     elif not args.opt_all:
         number = 1
-    stop_at_patch = patchfns.find_unapplied_patch(stop_at_patch)
-    if not stop_at_patch:
-        return cmd_result.ERROR
     silent = args.opt_quiet or not args.opt_verbose
     if patchfns.top_patch_needs_refresh() and not args.opt_force:
         sys.stderr.write('The topmost patch %s needs to be refreshed first.\n' % patchfns.print_top_patch())
         return cmd_result.ERROR | cmd_result.SUGGEST_FORCE_OR_REFRESH
-    patches = list_patches(number=number, stop_at_patch=stop_at_patch, push_all=args.opt_all)
+    patches = list_patches(number=number, stop_at_patch=stop_at_patch)
     if not patches:
         sys.stderr.write('"No patch removed\n')
         return cmd_result.ERROR
-    print patches
     is_ok = True
     for patch in patches:
         is_ok = remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent)

@@ -206,7 +206,7 @@ def run_push(args):
         patch_file = patchfns.patch_file_name(patch)
         sys.stdout.write('Applying patch %s\n' % patchfns.print_patch(patch))
         try:
-            pp_args = push_patch_args(patch, args.opt_reverse)
+            pp_args = push_patch_args(patch, reverse=False)
             prefix = os.path.join(patchfns.QUILT_PC, patch)
             if not args.opt_leave_rejects:
                 tmp = patchfns.gen_tempfile()
@@ -214,7 +214,6 @@ def run_push(args):
             else:
                 trf = ''
             patch_args = '%s --backup --prefix="%s" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
-            print patch_args
             result = apply_patch(patch_file, patch_args=patch_args)
             if not args.opt_quiet:
                 if do_colorize:
@@ -241,11 +240,11 @@ def run_push(args):
             else:
                 os.mkdir(patch_dir)
             if not os.path.exists(patch_file):
-                sys.stdout.write('Patch %s does not exist; applied empty patch\n' % patchfns.print_patch())
+                sys.stdout.write('Patch %s does not exist; applied empty patch\n' % patchfns.print_patch(patch))
             elif not putils.get_patch_diff(patch_file):
-                sys.stdout.write('Patch %s appears to be empty; applied\n' % patchfns.print_patch())
+                sys.stdout.write('Patch %s appears to be empty; applied\n' % patchfns.print_patch(patch))
             elif result.eflags != 0:
-                sys.stdout.write('Applied patch %s (forced; needs refresh)\n' % patchfns.print_patch())
+                sys.stdout.write('Applied patch %s (forced; needs refresh)\n' % patchfns.print_patch(patch))
                 return False
         else:
             rollback_patch(patch)
@@ -253,12 +252,11 @@ def run_push(args):
             trf = '-r %s' % tmp
             pp_args = push_patch_args(patch, reverse=True)
             patch_args = '%s --backup --prefix="%s" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
-            print patch_args
             result = apply_patch(patch_file, patch_args=patch_args)
             if result.eflags == 0:
-                sys.stdout.write('Patch %s can be reverse-applied\n' % patchfns.print_patch())
+                sys.stdout.write('Patch %s can be reverse-applied\n' % patchfns.print_patch(patch))
             else:
-                sys.stdout.write('Patch %s does not apply (enforce with -f)\n' % patchfns.print_patch())
+                sys.stdout.write('Patch %s does not apply (enforce with -f)\n' % patchfns.print_patch(patch))
             rollback_patch(patch)
             os.remove(tmp)
             return False
@@ -285,12 +283,10 @@ def run_push(args):
     elif args.opt_merge:
         more_patch_args += ' --merge=%s' % args.opt_merge
     more_patch_args += ' -F%d' % args.opt_fuzz if args.opt_fuzz else ''
-    print more_patch_args
     if patchfns.top_patch_needs_refresh():
         sys.stdout.write('The topmost patch %s needs to be refreshed first.\n' % patchfns.print_top_patch())
         return cmd_result.ERROR | cmd_result.SUGGEST_REFRESH
     patches = list_patches(number=number, stop_at_patch=stop_at_patch, push_all=args.opt_all)
-    print patches
     patchfns.create_db()
     do_colorize = args.opt_color == 'always' or (args.opt_color == 'auto' and sys.stderr.isatty())
     if do_colorize:

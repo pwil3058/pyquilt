@@ -166,11 +166,16 @@ def quote_bre(string):
     return result.stdout
 
 def print_patch(patchname):
-    if customization.get_config('QUILT_PATCH_PREFIX', False):
+    if customization.get_config('QUILT_PATCHES_PREFIX', False):
         parts = ['..'] * SUBDIR_DOWN + [QUILT_PATCHES, patchname]
         return os.path.join(*parts)
     else:
         return patchname
+
+def quilt_command(cmd):
+    from pyquilt_pkg import cmd_line
+    args = cmd_line.PARSER.parse_args(cmd.split())
+    return args.run_cmd(args)
 
 def patch_name_base(patchname):
     if patchname[:len(QUILT_PATCHES)+1] == QUILT_PATCHES + os.sep:
@@ -240,6 +245,18 @@ def find_patch(patchname):
         sys.stderr.write('Patch %s is not in series\n' % patchname)
     return False
 
+def cat_series():
+    if not os.path.exists(SERIES):
+       return False
+    ignore_line_cre = re.compile('(^#.*)|(^\s*$)')
+    upto_white_space_cre = re.compile('^\s*(\S+).*')
+    result = []
+    for line in open(SERIES).readlines():
+        if ignore_line_cre.match(line):
+            pass
+        result.append(upto_white_space_cre.match(line).group(1))
+    return result
+
 def top_patch():
     if not os.path.isfile(DB):
         return ''
@@ -261,6 +278,18 @@ def is_applied(patchname):
                 return True
     return False
 
+def applied_patches():
+    if not os.path.exists(DB):
+        return []
+    return [line.strip() for line in open(DB).readlines()]
+
+def find_patch_in_series(name=None):
+    if name:
+        return find_patch(name)
+    else:
+        return find_top_patch()
+
+
 def find_applied_patch(patchname=None):
     if patchname:
         patch = find_patch(patchname)
@@ -278,6 +307,33 @@ def _extract_patch_name(line):
     if line[0] == '#':
         return ''
     return line.strip()
+
+def _rename_in_xxxx(from_name, to_name, xxxx):
+    tmpfile = os.tmpfile()
+    if not tempfile:
+        return False
+    rec = re.compile(r'^(' + re.escape(from_name) + ').*')
+    change_made = False
+    for line in open(xxxx).readlines():
+        if not change_made and rec.match(line):
+            tmpfile.write(re.sub(re.escape(from_name), to_name, line))
+            change_made = True
+        else:
+            tmpfile.write(line)
+    if not change_made:
+        return False
+    try:
+        tmpfile.seek(0)
+        open(xxxx, 'w').write(tmpfile.read())
+        return True
+    except IOError:
+        return False
+
+def rename_in_series(from_name, to_name):
+    return _rename_in_xxxx(from_name, to_name, xxxx=SERIES)
+
+def rename_in_db(from_name, to_name):
+    return _rename_in_xxxx(from_name, to_name, xxxx=DB)
 
 def backup_file_name(patch, *args):
     if len(args) == 1:
@@ -352,6 +408,18 @@ def insert_in_series(patch, patch_args=None, before=None):
     except IOError:
         return False
 
+def remove_from_series(patch):
+    rec = re.compile(r'^(' + re.escape(patch) + ').*')
+    lines = []
+    for line in open(SERIES).readlines():
+        if not rec.match(line):
+            lines.append(line)
+    try:
+        open(SERIES, 'w').writelines(lines)
+        return True
+    except IOError:
+        return False
+
 def patches_on_top_of(patch):
     seen = False
     patches = []
@@ -372,6 +440,21 @@ def next_patch_for_file(patch, filnm):
 def add_to_db(patch):
     try:
         open(DB, 'a').write('%s\n' % patch)
+        return True
+    except IOError:
+        return False
+
+def remove_from_db(patch):
+    rec = re.compile(r'^(' + re.escape(patch) + ').*')
+    lines = []
+    for line in open(DB).readlines():
+        if not rec.match(line):
+            lines.append(line)
+    try:
+        if not lines:
+            os.remove(DB)
+        else:
+            open(DB, 'w').writelines(lines)
         return True
     except IOError:
         return False

@@ -24,3 +24,5 @@ from pyquilt_pkg import subcmd_refresh
 from pyquilt_pkg import subcmd_push
 from pyquilt_pkg import subcmd_pop
 from pyquilt_pkg import subcmd_add
+from pyquilt_pkg import subcmd_rename
+from pyquilt_pkg import subcmd_delete
