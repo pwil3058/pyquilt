@@ -247,13 +247,13 @@ def find_patch(patchname):
 
 def cat_series():
     if not os.path.exists(SERIES):
-       return False
+       return []
     ignore_line_cre = re.compile('(^#.*)|(^\s*$)')
     upto_white_space_cre = re.compile('^\s*(\S+).*')
     result = []
     for line in open(SERIES).readlines():
         if ignore_line_cre.match(line):
-            pass
+            continue
         result.append(upto_white_space_cre.match(line).group(1))
     return result
 
