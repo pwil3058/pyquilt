@@ -588,7 +588,7 @@ def in_valid_dir(filename):
     while dirpath:
         for invalid_dir in [QUILT_PATCHES, QUILT_PC]:
             if os.path.samefile(dirpath, invalid_dir):
-                sys.stderr('File %s is located below %s\n' % (filename, invalid_dir,))
+                sys.stderr.write('File %s is located below %s\n' % (filename, invalid_dir + os.sep))
                 return False
         dirpath = os.path.dirname(dirpath)
     return True

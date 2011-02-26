@@ -15,6 +15,7 @@
 
 import sys
 import os
+import stat
 
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
@@ -73,7 +74,7 @@ def run_add(args):
             continue
         if os.path.exists(filename):
             # The original tree may be read-only.
-            os.chmod(os.stat(filename).st_mode|stat.S_IWUSR)
+            os.chmod(filename, os.stat(filename).st_mode|stat.S_IWUSR)
         sys.stdout.write('File %s added to patch %s\n' % (filename, patchfns.print_patch(patch)))
     return status
 
