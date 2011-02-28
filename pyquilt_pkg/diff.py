@@ -62,14 +62,14 @@ def diff_file(filnm, old_file, new_file, args):
         new_hdr = os.path.join(dirnm, filnm)
     index = new_hdr
     use_timestamps = not _get_no_diff_timestamps(args)
-    if os.path.getsize(old_file) == 0:
+    if not os.path.exists(old_file) or os.path.getsize(old_file) == 0:
         old_file = '/dev/null'
         old_hdr = '/dev/null'
         if use_timestamps:
             old_date = '\t1970-01-01 00:00:00.000000000 +0000'
     elif use_timestamps:
         old_date = '\t%s' % file_mtime_as_string(old_file)
-    if os.path.getsize(new_file) == 0:
+    if not os.path.exists(new_file) or os.path.getsize(new_file) == 0:
         if opt_strip_level == 0:
             old_hdr = new_hdr
         new_file = '/dev/null'
