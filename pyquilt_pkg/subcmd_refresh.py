@@ -281,7 +281,7 @@ def run_refresh(args):
             except:
                 sys.stderr.write('Failed to create patch %s\n' % patchfns.print_patch(patch))
                 return clean_up(cmd_result.ERROR)
-            sys.stdout.write('Fork of patch %s created as %s.\n' % (patchfns.print_patch(old_patch), patchfns.print_patch(patch)))
+            sys.stdout.write('Fork of patch %s created as %s\n' % (patchfns.print_patch(old_patch), patchfns.print_patch(patch)))
         elif is_ok:
             sys.stdout.write('Refreshed patch %s\n' % patchfns.print_patch(patch))
         fsutils.touch(os.path.join(QUILT_PC, patch, '.timestamp'))

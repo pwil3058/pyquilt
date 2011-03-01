@@ -374,6 +374,14 @@ def _get_series():
                 result.append(patch_name)
     return result
 
+def patches_before(patch):
+    """Return list of patches in series before the nominated patch"""
+    full_series = _get_series()
+    if not patch or patch not in full_series:
+        return full_series
+    patch_index = full_series.index(patch)
+    return full_series[:patch_index]
+
 def patches_after(patch):
     full_series = _get_series()
     if not patch or patch not in full_series:
@@ -543,7 +551,7 @@ def apply_patch_temporarily(workdir, patch, *files):
     patch_file = patch_file_name(patch)
     args = patch_args(patch)
     srcdir = os.path.join(QUILT_PC, patch)
-    if backup.restore(srcdir, to_dir=workdir, files=files, keep=True) is not True:
+    if backup.restore(srcdir, to_dir=workdir, filelist=files, keep=True) is not True:
         sys.stderr.write('Failed to copy files to temporary directory\n')
         return False
     if os.path.isfile(patch_file) and os.path.getsize(patch_file) > 0:

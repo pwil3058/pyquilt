@@ -49,7 +49,7 @@ def set_up():
 
 def wrap(text, category):
     cseq = MAP.get(category, None)
-    if cseq is None:
+    if not cseq:
         return text
     else:
         return cseq + text + CLEAR
