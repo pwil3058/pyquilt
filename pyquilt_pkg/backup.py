@@ -48,7 +48,13 @@ def _remove_parents(filename):
     last_sep = filename.rfind(os.sep)
     while last_sep != -1:
         dirname = filename[0:last_sep]
-        os.rmdir(dirname) # let the caller handle exceptions
+        try:
+            os.rmdir(dirname)
+        except OSError as edata:
+            if edata.errno == errno.ENOTEMPTY:
+                return
+            else:
+                raise
         last_sep = dirname.rfind(os.sep)
 
 def _copy_fd(from_fd, to_fd):

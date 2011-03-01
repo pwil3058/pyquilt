@@ -195,6 +195,31 @@ def find_first_patch():
         sys.stderr.write('No series file found\n')
     return False
 
+# Also remove -R if present.
+def change_db_strip_level(level, patch):
+    level = '' if level == '-p1' else level
+    if os.path.exists(SERIES):
+        rec = re.compile(r'^(' + re.escape(patch) + r')(\s+.*)\n$')
+        lines = open(SERIES).readlines()
+        for index in range(len(lines)):
+            match = rec.match(lines[index])
+            if match:
+                patch_args = match.group(2).split()
+                if '-R' in patch_args:
+                    patch_args.remove('-R')
+                for aindex in patch_args:
+                    if patch_args[aindex].startswith('-p'):
+                        patch_args[aindex] = level
+                pa_str = ' '.join(patch_args).strip()
+                if pa_str:
+                    lines[index] = '%s %s\n' % (group(1), group(2))
+                else:
+                    lines[index] = '%s\n' % group(1)
+                open(SERIES, 'w').writelines(lines)
+                break
+    else:
+        return False
+
 def patch_in_series(patch):
     if os.path.isfile(SERIES):
         rec = re.compile(r'^' + re.escape(patch) + r'(\s.*)?$')

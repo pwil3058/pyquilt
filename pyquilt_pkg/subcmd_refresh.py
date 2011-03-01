@@ -285,6 +285,11 @@ def run_refresh(args):
         elif is_ok:
             sys.stdout.write('Refreshed patch %s\n' % patchfns.print_patch(patch))
         fsutils.touch(os.path.join(QUILT_PC, patch, '.timestamp'))
+    if is_ok:
+        tagf = os.path.join(QUILT_PC, patch + '~refresh')
+        if os.path.exists(tagf):
+            os.remove(tagf)
+        is_ok = patchfns.change_db_strip_level('-p%s' % num_strip_level, patch)
     return clean_up(cmd_result.OK if is_ok else cmd_result.ERROR)
 
 parser.set_defaults(run_cmd=run_refresh)

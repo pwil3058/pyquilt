@@ -193,8 +193,7 @@ def colorize(text):
 
 def rollback_patch(patch, verbose=False):
     backup_dir = os.path.join(patchfns.QUILT_PC, patch)
-    if backip.restore(backup_dir, verbose=verbose) is True:
-        shutil.removedirs(backup_dir)
+    return backup.restore(backup_dir, verbose=verbose)
 
 def run_push(args):
     def add_patch(patch):
@@ -213,12 +212,14 @@ def run_push(args):
                 trf = '-r %s' % tmp
             else:
                 trf = ''
-            patch_args = '%s --backup --prefix="%s" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
+            patch_args = '%s --backup --prefix="%s/" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
             result = apply_patch(patch_file, patch_args=patch_args)
-            if not args.opt_quiet:
+            if result.eflags != 0 or not args.opt_quiet:
                 if do_colorize:
+                    sys.stderr.write(colorize(cleanup_patch_output(result.stderr, args)))
                     sys.stdout.write(colorize(cleanup_patch_output(result.stdout, args)))
                 else:
+                    sys.stderr.write(cleanup_patch_output(result.stderr, args))
                     sys.stdout.write(cleanup_patch_output(result.stdout, args))
         except KeyboardInterrupt:
             rollback_patch(patch)
@@ -228,12 +229,13 @@ def run_push(args):
             if tmp:
                 os.remove(tmp)
         if result.eflags == 0 or (result.eflags == 1 and args.opt_force):
+            patchfns.add_to_db(patch)
             refresh_file = os.path.join(patchfns.QUILT_PC, patch + '~refresh')
-            if patchfns.add_to_db(patch):
+            if result.eflags == 0:
                 if os.path.exists(refresh_file):
                     os.remove(refresh_file)
-                else:
-                    fsutils.touch(refresh_file)
+            else:
+                fsutils.touch(refresh_file)
             patch_dir = os.path.join(patchfns.QUILT_PC, patch)
             if os.path.exists(patch_dir):
                 fsutils.touch(os.path.join(patch_dir, '.timestamp'))
@@ -248,10 +250,10 @@ def run_push(args):
                 return False
         else:
             rollback_patch(patch)
-            tmp = patchfns.tempfile()
+            tmp = patchfns.gen_tempfile()
             trf = '-r %s' % tmp
             pp_args = push_patch_args(patch, reverse=True)
-            patch_args = '%s --backup --prefix="%s" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
+            patch_args = '%s --backup --prefix="%s/" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
             result = apply_patch(patch_file, patch_args=patch_args)
             if result.eflags == 0:
                 sys.stdout.write('Patch %s can be reverse-applied\n' % patchfns.print_patch(patch))
@@ -296,7 +298,8 @@ def run_push(args):
         is_ok = add_patch(patch)
         if not is_ok:
             break
-    sys.stdout.write('Now at patch %s\n' % patchfns.print_top_patch())
+    if is_ok:
+        sys.stdout.write('Now at patch %s\n' % patchfns.print_top_patch())
     return cmd_result.OK if is_ok else cmd_result.ERROR
 
 parser.set_defaults(run_cmd=run_push)
