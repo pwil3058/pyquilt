@@ -131,7 +131,7 @@ def check_for_pending_changes(patch):
     if os.path.exists(patch_file) and os.path.getsize(patch_file) > 0:
         patch_args = '%s --no-backup-if-mismatch -E' % ' '.join(patchfns.patch_args(patch))
         result = putils.apply_patch(patch_file, indir=workdir, patch_args=patch_args)
-        if result.eflags != 0:
+        if result.eflags != 0 and not os.path.exists(patchdir):
             output.write(result.stdout)
             output.error('Failed to patch temporary files\n')
             shutil.rmtree(workdir)
@@ -153,7 +153,7 @@ def check_for_pending_changes(patch):
             break
     shutil.rmtree(workdir)
     if failed:
-        output.error('Patch %s does not remove cleanly (refresh it or enforce with -f)\n' % patchfns.print_patch(patc))
+        output.error('Patch %s does not remove cleanly (refresh it or enforce with -f)\n' % patchfns.print_patch(patch))
         return cmd_result.ERROR_SUGGEST_FORCE
     return True
 
@@ -212,8 +212,9 @@ def run_pop(args):
         return cmd_result.ERROR
     is_ok = True
     for patch in patches:
-        if not remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent):
-            return cmd_result.ERROR
+        result = remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent)
+        if result is not True:
+            return cmd_result.ERROR if result is False else result
         if not args.opt_quiet:
             output.write('\n')
     if not patchfns.top_patch():
