@@ -73,7 +73,10 @@ def _perror(edata, prefix=None):
     if prefix:
         sys.stderr.write('%s: %s\n' % (prefix, edata.strerror))
     else:
-        sys.stderr.write('%s\n' % edata.strerror)
+        try:
+            sys.stderr.write('%s: %s\n' % (edata.filename, edata.strerror))
+        except AttributeError:
+            sys.stderr.write('%s\n' % edata.strerror)
 
 def _creat(name, mode=0777):
     return os.open(name, os.O_WRONLY|os.O_CREAT|os.O_TRUNC, mode)
@@ -83,19 +86,20 @@ def _copy_file(from_fn, stat_data, to_fn):
     try:
         from_fd = os.open(from_fn, os.O_RDONLY)
     except OSError as edata:
-        _perror(edata, from_fn)
+        _perror(edata)
         return False
     try:
         # make sure we don't inherit this file's mode.
         os.unlink(to_fn)
     except OSError as edata:
         if edata.errno != errno.ENOENT:
-            return edata
+            _perror(edata)
+            return False
     try:
         to_fd = _creat(to_fn, mode=stat_data.st_mode)
     except OSError as edata:
-        _perror(to_fn);
-        os.close(edata, from_fd);
+        _perror(edata);
+        os.close(from_fd);
         return False
     os.fchmod(to_fd, stat_data.st_mode)
     try:
@@ -124,7 +128,7 @@ def ensure_nolinks(filename):
     try:
         stat_data = os.stat(filename)
     except OSError as edata:
-        _perror(edata, filename)
+        _perror(edata)
         return False
     if stat_data.st_nlink > 1:
         from_fd = to_fd = None
@@ -137,7 +141,7 @@ def ensure_nolinks(filename):
             os.rename(tmpname, filename)
             return True;
         except OSError as edata:
-            _perror(edata, filename)
+            _perror(edata)
             return False
         finally:
             if from_fd is not None:
@@ -161,7 +165,8 @@ def backup(bu_dir, filelist, verbose=False):
             os.unlink(backup)
         except OSError as edata:
             if edata.errno != errno.ENOENT:
-                return edata
+                _perror(edata)
+                return False
         _create_parents(backup)
         if missing_file:
             if verbose:
@@ -169,7 +174,7 @@ def backup(bu_dir, filelist, verbose=False):
             try:
                 os.close(_creat(backup, mode=0666))
             except OSError as edata:
-                _perror(edata, backup)
+                _perror(edata)
                 return False
         else:
             if verbose:
@@ -188,16 +193,15 @@ def backup(bu_dir, filelist, verbose=False):
             os.utime(backup, (stat_data.st_mtime, stat_data.st_mtime,))
         return True
     for filename in filelist:
-        status = backup_file(filename);
-        if status is not True:
-            return status
+        if not backup_file(filename):
+            return False
     return True
 
 # Restore
 def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=False):
     def restore_file(file_nm):
         backup = os.path.join(bu_dir, file_nm)
-        file_nm = file_nm if to_dir is None else os.path.join(to_dir, file_nm)
+        file_nm = file_nm if to_dir is None else  os.path.relpath(os.path.join(to_dir, file_nm))
         _create_parents(file_nm)
         try:
             stat_data = os.stat(backup)
@@ -224,9 +228,8 @@ def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=
             except OSError as edata:
                 if edata.errno != errno.ENOENT:
                     raise
-            result = _link_or_copy_file(backup, stat_data, file_nm)
-            if result is not True:
-                return result
+            if not _link_or_copy_file(backup, stat_data, file_nm):
+                return False
             if not keep:
                 os.unlink(backup)
                 _remove_parents(backup)
@@ -239,30 +242,39 @@ def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=
         return False
     status = True
     if filelist is None or len(filelist) == 0:
-        for basedir, dirnames, filenames in os.walk(bu_dir):
-            for filename in filenames:
-                status = restore_file(filename)
-                if status is not True:
-                    return status
+        def onerror(exception):
+            raise exception
+        try:
+            for basedir, dirnames, filenames in os.walk(bu_dir, onerror=onerror):
+                for filename in filenames:
+                    if not restore_file(filename):
+                        return False
+        except OSError as edata:
+            _perror(edata)
+            return False
     else:
         for filename in filelist:
-            status = restore_file(filename)
-            if status is not True:
-                break
-    return status
+            if not restore_file(filename):
+                return False
+    return True
 
 # Delink
 def ensure_nolinks_in_dir(in_dir, verbose=False):
+    def onerror(exception):
+        raise exception
     if not os.path.isdir(in_dir):
         return False
-    for basedir, dirnames, filenames in os.walk(in_dir):
-        for filename in filenames:
-            filename = os.path.join(basedir, filename)
-            if verbose:
-                sys.stdout.write('Delinking %s\n' % filename)
-            status = ensure_nolinks(filename)
-            if status is not True:
-                return status
+    try:
+        for basedir, dirnames, filenames in os.walk(in_dir, onerror=onerror):
+            for filename in filenames:
+                filename = os.path.join(basedir, filename)
+                if verbose:
+                    sys.stdout.write('Delinking %s\n' % filename)
+                if not ensure_nolinks(filename):
+                    return False
+    except IOError as edata:
+        _perror(edata)
+        return False
     return True
 
 # Remove
@@ -286,14 +298,18 @@ def remove(bu_dir, filelist=False, verbose=False):
         return False
     status = True
     if filelist is None or len(filelist) == 0:
-        for basedir, dirnames, filenames in os.walk(bu_dir):
-            for filename in filenames:
-                status = remove_file(filename)
-                if status is not True:
-                    return status
+        def onerror(exception):
+            raise exception
+        try:
+            for basedir, dirnames, filenames in os.walk(bu_dir):
+                for filename in filenames:
+                    if not remove_file(filename):
+                        return False
+        except IOError as edata:
+            _perror(edata)
+            return False
     else:
         for filename in filelist:
-            status = remove_file(os.path.join(bu_dir, filename))
-            if status is not True:
-                break
-    return status
+            if not remove_file(os.path.join(bu_dir, filename)):
+                return False
+    return True

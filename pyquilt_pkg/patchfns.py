@@ -308,6 +308,12 @@ def applied_patches():
         return []
     return [line.strip() for line in open(DB).readlines()]
 
+def applied_before(patch):
+    patches = applied_patches()
+    if not patches:
+        return []
+    return patches[:patches.index(patch)]
+
 def find_patch_in_series(name=None):
     if name:
         return find_patch(name)
@@ -551,7 +557,7 @@ def apply_patch_temporarily(workdir, patch, *files):
     patch_file = patch_file_name(patch)
     args = patch_args(patch)
     srcdir = os.path.join(QUILT_PC, patch)
-    if backup.restore(srcdir, to_dir=workdir, filelist=files, keep=True) is not True:
+    if not backup.restore(srcdir, to_dir=workdir, filelist=files, keep=True):
         sys.stderr.write('Failed to copy files to temporary directory\n')
         return False
     if os.path.isfile(patch_file) and os.path.getsize(patch_file) > 0:

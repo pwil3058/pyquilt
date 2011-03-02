@@ -68,13 +68,13 @@ def run_delete(args):
             sys.stderr.write('No next patch\n')
             return cmd_result.ERROR
     if not patch:
-        patchfns.find_first_patch()
+        patchfns.find_top_patch()
         return cmd_result.ERROR
     if patchfns.is_applied(patch):
         if patch != patchfns.top_patch():
             sys.stderr.write('Patch %s is currently applied\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
-        if not patchfns.quilt_command('pop -qf'):
+        if patchfns.quilt_command('pop -qf') != cmd_result.OK:
             return cmd_result.ERROR
     if patchfns.remove_from_series(patch):
         sys.stdout.write('Removed patch %s\n' % patchfns.print_patch(patch))

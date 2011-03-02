@@ -29,3 +29,4 @@ from pyquilt_pkg import subcmd_delete
 from pyquilt_pkg import subcmd_setup
 from pyquilt_pkg import subcmd_annotate
 from pyquilt_pkg import subcmd_series
+from pyquilt_pkg import subcmd_applied

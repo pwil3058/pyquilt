@@ -124,7 +124,7 @@ def check_for_pending_changes(patch):
     patchdir = os.path.join(patchfns.QUILT_PC, patch)
     if os.path.isdir(patchdir):
         prefix = os.path.abspath(patchdir)
-        if backup.restore(prefix, to_dir=workdir, keep=True) is not True:
+        if not backup.restore(prefix, to_dir=workdir, keep=True):
             sys.stderr.write('Failed to copy files to temporary directory\n')
             shutil.rmtree(workdir)
             return False
@@ -158,8 +158,8 @@ def check_for_pending_changes(patch):
     return True
 
 def remove_patch(patch, force, check, silent):
-    status = True
     try:
+        status = True
         if not force and (check or files_may_have_changed(patch)):
             status = check_for_pending_changes(patch)
         if status is True:
@@ -174,19 +174,22 @@ def remove_patch(patch, force, check, silent):
                     os.rmdir(patchdir)
                 except OSError as edata:
                     if edata.errno != errno.ENOENT:
-                        status = edata
+                        sys.stderr.write('%s: %s\n' % (patchdir, edata.errstring))
+                        status = False
             else:
                 sys.stdout.write('Removing patch %s\n' % patchfns.print_patch(patch))
-                status = backup.restore(patchdir, touch=True, verbose=not silent)
+                if not backup.restore(patchdir, touch=True, verbose=not silent):
+                    status = False
             patchfns.remove_from_db(patch)
             try:
                 os.remove(os.path.join(patchdir + '~refresh'))
             except OSError as edata:
                 if edata.errno != errno.ENOENT:
-                    status = edata
+                    sys.stderr.write('%s: %s\n' % (patchdir, edata.errstring))
+                    status = False
+        return status
     except KeyboardInterrupt:
-        status = False
-    return status
+        return False
 
 def run_pop(args):
     number = stop_at_patch = None
@@ -199,7 +202,7 @@ def run_pop(args):
             stop_at_patch = patchfns.find_unapplied_patch(args.patchnamornum)
     elif not args.opt_all:
         number = 1
-    silent = args.opt_quiet or not args.opt_verbose
+    silent = args.opt_quiet
     if patchfns.top_patch_needs_refresh() and not args.opt_force:
         sys.stderr.write('The topmost patch %s needs to be refreshed first.\n' % patchfns.print_top_patch())
         return cmd_result.ERROR | cmd_result.SUGGEST_FORCE_OR_REFRESH
@@ -209,17 +212,10 @@ def run_pop(args):
         return cmd_result.ERROR
     is_ok = True
     for patch in patches:
-        is_ok = remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent)
-        if is_ok is not True:
-            if is_ok is not False:
-                try:
-                    sys.stderr.write('%s: %s\n' % (is_ok.filename, is_ok.strerror))
-                except Exception:
-                    try:
-                        sys.stderr.write('Error: %s\n' % is_ok.strerror)
-                    except Exception:
-                        pass
-            break
+        if not remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent):
+            return cmd_result.ERROR
+        if not args.opt_quiet:
+            sys.stdout.write('\n')
     if not patchfns.top_patch():
         sys.stdout.write('No patches applied\n')
     else:
