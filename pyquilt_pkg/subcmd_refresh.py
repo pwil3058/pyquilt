@@ -13,7 +13,6 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 import shutil
 
@@ -25,6 +24,7 @@ from pyquilt_pkg import diff
 from pyquilt_pkg import putils
 from pyquilt_pkg import fsutils
 from pyquilt_pkg import shell
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'refresh',
@@ -179,7 +179,7 @@ def run_refresh(args):
         files = patchfns.files_in_patch(patch)
     if args.opt_new_name:
         if args.patchname:
-            sys.stderr.write('Can only refresh the topmost patch with -z currently\n')
+            output.error('Can only refresh the topmost patch with -z currently\n')
             return cmd_result.ERROR
         old_patch = patch
         old_patch_args = patchfns.patch_args(old_patch)
@@ -188,7 +188,7 @@ def run_refresh(args):
         else:
             patch = args.opt_new_name
         if os.path.exists(patchfns.patch_file_name(patch)):
-            sys.stderr.write('Patch %s exists already\n' % patchfns.print_patch(patch))
+            output.error('Patch %s exists already\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
     if args.opt_strip_level is None:
         args.opt_strip_level = patchfns.patch_strip_level(patch)
@@ -197,7 +197,7 @@ def run_refresh(args):
     elif args.opt_strip_level == 'ab':
         num_strip_level = '1'
     else:
-        sys.stderr.write('Cannot refresh patches with -p%s, please specify -p0 or -p1 instead\n' % args.opt_strip_level)
+        output.error('Cannot refresh patches with -p%s, please specify -p0 or -p1 instead\n' % args.opt_strip_level)
         return cmd_result.ERROR
     if args.opt_new_name:
         workdir = patchfns.gen_tempfile(asdir=True, template=os.path.join(os.getcwd(), 'quilt'))
@@ -219,31 +219,31 @@ def run_refresh(args):
                 files_were_shadowed = True
         result = diff.diff_file(filn, old_file, new_file, args)
         if result.eflags > 1:
-            sys.stderr.write('\n'.join(result.stderr, 'Diff failed, aborting\n'))
+            output.error('\n'.join(result.stderr, 'Diff failed, aborting\n'))
             return clean_up(cmd_result.ERROR)
         elif result.eflags == 0 or not result.stdout:
             continue
         else:
             patch_content += result.stdout
     if not patch_content:
-        sys.stderr.write('Nothing in patch %s\n' % patchfns.print_patch(patch))
+        output.error('Nothing in patch %s\n' % patchfns.print_patch(patch))
         return clean_up(cmd_result.ERROR)
     if files_were_shadowed:
         if not args.opt_force:
-            sys.stderr.write('More recent patches modify files in patch %s. Enforce refresh with -f.\n' % patchfns.print_patch(patch))
+            output.error('More recent patches modify files in patch %s. Enforce refresh with -f.\n' % patchfns.print_patch(patch))
             return clean_up(cmd_result.ERROR_SUGGEST_FORCE)
         if args.opt_strip_trailing_whitespace:
-            sys.stderr.write('Cannot use --strip-trailing-whitespace on a patch that has shadowed files.\n')
+            output.error('Cannot use --strip-trailing-whitespace on a patch that has shadowed files.\n')
     if args.opt_strip_trailing_whitespace and not files_were_shadowed:
         result = putils.remove_trailing_ws(patch_content, num_strip_level)
         if result.eflags == cmd_result.OK:
             patch_content = result.stdout
         if result.stderr:
-            sys.stderr.write(result.stderr)
+            output.error(result.stderr)
     else:
         result = putils.remove_trailing_ws(patch_content, num_strip_level, dry_run=True)
         if result.stderr:
-            sys.stderr.write('\n'.join(result[1:]))
+            output.error('\n'.join(result[1:]))
     patch_file = patchfns.patch_file_name(patch)
     prev_patch_file = patch_file if os.path.isfile(patch_file) else '/dev/null'
     result_content = patchfns.patch_header(prev_patch_file)
@@ -257,20 +257,20 @@ def run_refresh(args):
     is_ok = True
     QUILT_PC = customization.get_config('QUILT_PC')
     if fsutils.file_contents_equal(patch_file, result_content):
-        sys.stdout.write('Patch %s is unchanged\n' % patchfns.print_patch(patch))
+        output.write('Patch %s is unchanged\n' % patchfns.print_patch(patch))
     else:
         if args.opt_backup and os.path.isfile(patch_file):
             try:
                 os.rename(patch_file, patch_file + '~')
             except OSError:
-                sys.stderr.write('Failed to create backup %s\n' % patch_file + '~')
+                output.error('Failed to create backup %s\n' % patch_file + '~')
                 is_ok = False
         if is_ok:
             is_ok = fsutils.set_file_contents(patch_file, result_content)
         if is_ok and args.opt_new_name:
             insert_ok = patchfns.insert_in_series(patch, old_patch_args)
             if not insert_ok:
-                sys.stderr.write('Failed to insert patch %s into file series\n' % patchfns.print_patch(patch))
+                output.error('Failed to insert patch %s into file series\n' % patchfns.print_patch(patch))
                 return clean_up(cmd_result.ERROR)
             try:
                 patch_dir = os.path.join(QUILT_PC, patch)
@@ -279,11 +279,11 @@ def run_refresh(args):
                 os.rename(workdir, patch_dir)
                 open(patchfns.DB, 'a').write(patch + '\n')
             except:
-                sys.stderr.write('Failed to create patch %s\n' % patchfns.print_patch(patch))
+                output.error('Failed to create patch %s\n' % patchfns.print_patch(patch))
                 return clean_up(cmd_result.ERROR)
-            sys.stdout.write('Fork of patch %s created as %s\n' % (patchfns.print_patch(old_patch), patchfns.print_patch(patch)))
+            output.write('Fork of patch %s created as %s\n' % (patchfns.print_patch(old_patch), patchfns.print_patch(patch)))
         elif is_ok:
-            sys.stdout.write('Refreshed patch %s\n' % patchfns.print_patch(patch))
+            output.write('Refreshed patch %s\n' % patchfns.print_patch(patch))
         fsutils.touch(os.path.join(QUILT_PC, patch, '.timestamp'))
     if is_ok:
         tagf = os.path.join(QUILT_PC, patch + '~refresh')

@@ -13,7 +13,6 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 import stat
 
@@ -21,6 +20,7 @@ from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
 from pyquilt_pkg import backup
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'add',
@@ -57,25 +57,25 @@ def run_add(args):
             status = 1
             continue
         if patchfns.file_in_patch(patch, filename):
-            sys.stderr.write('File %s is already in patch %s\n' % (filename, patchfns.print_patch(patch)))
+            output.error('File %s is already in patch %s\n' % (filename, patchfns.print_patch(patch)))
             status = 2 if status != 1 else 1
         next_patch = patchfns.next_patch_for_file(patch, filename)
         if next_patch is not None:
-            sys.stderr.write('File %s modified by patch %s\n' % (filename, patchfns.print_patch(next_patch)))
+            output.error('File %s modified by patch %s\n' % (filename, patchfns.print_patch(next_patch)))
             status = 1
             continue
         if os.path.islink(filename):
-            sys.stderr.write('Cannot add symbolic link %s\n' % filename)
+            output.error('Cannot add symbolic link %s\n' % filename)
             status = 1
             continue
         if not backup.backup(patch_dir, [filename]):
-            sys.stderr.write('Failed to back up file %s\n' % filename)
+            output.error('Failed to back up file %s\n' % filename)
             status = 1
             continue
         if os.path.exists(filename):
             # The original tree may be read-only.
             os.chmod(filename, os.stat(filename).st_mode|stat.S_IWUSR)
-        sys.stdout.write('File %s added to patch %s\n' % (filename, patchfns.print_patch(patch)))
+        output.write('File %s added to patch %s\n' % (filename, patchfns.print_patch(patch)))
     return status
 
 parser.set_defaults(run_cmd=run_add)

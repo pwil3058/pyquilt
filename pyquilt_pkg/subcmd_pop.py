@@ -13,7 +13,6 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 import shutil
 import argparse
@@ -30,6 +29,7 @@ from pyquilt_pkg import fsutils
 from pyquilt_pkg import shell
 from pyquilt_pkg import colour
 from pyquilt_pkg import backup
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'pop',
@@ -125,15 +125,15 @@ def check_for_pending_changes(patch):
     if os.path.isdir(patchdir):
         prefix = os.path.abspath(patchdir)
         if not backup.restore(prefix, to_dir=workdir, keep=True):
-            sys.stderr.write('Failed to copy files to temporary directory\n')
+            output.error('Failed to copy files to temporary directory\n')
             shutil.rmtree(workdir)
             return False
     if os.path.exists(patch_file) and os.path.getsize(patch_file) > 0:
         patch_args = '%s --no-backup-if-mismatch -E' % ' '.join(patchfns.patch_args(patch))
         result = putils.apply_patch(patch_file, indir=workdir, patch_args=patch_args)
         if result.eflags != 0:
-            sys.stdout.write(result.stdout)
-            sys.stderr.write('Failed to patch temporary files\n')
+            output.write(result.stdout)
+            output.error('Failed to patch temporary files\n')
             shutil.rmtree(workdir)
             return False
     failed = False
@@ -153,7 +153,7 @@ def check_for_pending_changes(patch):
             break
     shutil.rmtree(workdir)
     if failed:
-        sys.stderr.write('Patch %s does not remove cleanly (refresh it or enforce with -f)\n' % patchfns.print_patch(patc))
+        output.error('Patch %s does not remove cleanly (refresh it or enforce with -f)\n' % patchfns.print_patch(patc))
         return cmd_result.ERROR_SUGGEST_FORCE
     return True
 
@@ -169,15 +169,15 @@ def remove_patch(patch, force, check, silent):
             except OSError:
                 pass
             if not os.path.exists(patchdir) or not os.listdir(patchdir):
-                sys.stdout.write('Patch %s appears to be empty, removing\n' % patchfns.print_patch(patch))
+                output.write('Patch %s appears to be empty, removing\n' % patchfns.print_patch(patch))
                 try:
                     os.rmdir(patchdir)
                 except OSError as edata:
                     if edata.errno != errno.ENOENT:
-                        sys.stderr.write('%s: %s\n' % (patchdir, edata.errstring))
+                        output.error('%s: %s\n' % (patchdir, edata.errstring))
                         status = False
             else:
-                sys.stdout.write('Removing patch %s\n' % patchfns.print_patch(patch))
+                output.write('Removing patch %s\n' % patchfns.print_patch(patch))
                 if not backup.restore(patchdir, touch=True, verbose=not silent):
                     status = False
             patchfns.remove_from_db(patch)
@@ -185,7 +185,7 @@ def remove_patch(patch, force, check, silent):
                 os.remove(os.path.join(patchdir + '~refresh'))
             except OSError as edata:
                 if edata.errno != errno.ENOENT:
-                    sys.stderr.write('%s: %s\n' % (patchdir, edata.errstring))
+                    output.error('%s: %s\n' % (patchdir, edata.errstring))
                     status = False
         return status
     except KeyboardInterrupt:
@@ -204,22 +204,22 @@ def run_pop(args):
         number = 1
     silent = args.opt_quiet
     if patchfns.top_patch_needs_refresh() and not args.opt_force:
-        sys.stderr.write('The topmost patch %s needs to be refreshed first.\n' % patchfns.print_top_patch())
+        output.error('The topmost patch %s needs to be refreshed first.\n' % patchfns.print_top_patch())
         return cmd_result.ERROR | cmd_result.SUGGEST_FORCE_OR_REFRESH
     patches = list_patches(number=number, stop_at_patch=stop_at_patch)
     if not patches:
-        sys.stderr.write('No patch removed\n')
+        output.error('No patch removed\n')
         return cmd_result.ERROR
     is_ok = True
     for patch in patches:
         if not remove_patch(patch, force=args.opt_force, check=args.opt_remove, silent=silent):
             return cmd_result.ERROR
         if not args.opt_quiet:
-            sys.stdout.write('\n')
+            output.write('\n')
     if not patchfns.top_patch():
-        sys.stdout.write('No patches applied\n')
+        output.write('No patches applied\n')
     else:
-        sys.stdout.write('Now at patch %s\n' % patchfns.print_top_patch())
+        output.write('Now at patch %s\n' % patchfns.print_top_patch())
     return cmd_result.OK if is_ok is True else cmd_result.ERROR
 
 parser.set_defaults(run_cmd=run_pop)

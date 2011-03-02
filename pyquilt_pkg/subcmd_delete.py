@@ -13,12 +13,12 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'delete',
@@ -65,21 +65,21 @@ def run_delete(args):
     if args.opt_next:
         patch =patchfns.patch_after(patch)
         if not patch:
-            sys.stderr.write('No next patch\n')
+            output.error('No next patch\n')
             return cmd_result.ERROR
     if not patch:
         patchfns.find_top_patch()
         return cmd_result.ERROR
     if patchfns.is_applied(patch):
         if patch != patchfns.top_patch():
-            sys.stderr.write('Patch %s is currently applied\n' % patchfns.print_patch(patch))
+            output.error('Patch %s is currently applied\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
         if patchfns.quilt_command('pop -qf') != cmd_result.OK:
             return cmd_result.ERROR
     if patchfns.remove_from_series(patch):
-        sys.stdout.write('Removed patch %s\n' % patchfns.print_patch(patch))
+        output.write('Removed patch %s\n' % patchfns.print_patch(patch))
     else:
-        sys.stderr.write('Failed to remove patch %s\n' % patchfns.print_patch(patch))
+        output.error('Failed to remove patch %s\n' % patchfns.print_patch(patch))
         return cmd_result.ERROR
     patch_file = patchfns.patch_file_name(patch)
     if args.opt_remove and os.path.exists(patch_file):
@@ -87,13 +87,13 @@ def run_delete(args):
             try:
                 os.rename(patch_file, patch_file + '~')
             except IOError:
-                sys.stderr.write('Failed to backup patch file %s\n' % patch_file)
+                output.error('Failed to backup patch file %s\n' % patch_file)
                 return cmd_result.ERROR
         else:
             try:
                 os.remove(patch_file)
             except IOError:
-                sys.stderr.write('Failed to remove patch file %s\n' % patch_file)
+                output.error('Failed to remove patch file %s\n' % patch_file)
                 return cmd_result.ERROR
     return cmd_result.OK
 

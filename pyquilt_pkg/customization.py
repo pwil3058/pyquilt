@@ -20,6 +20,7 @@ import re
 import sys
 
 from pyquilt_pkg import cmd_result
+from pyquilt_pkg import output
 
 QUILT_NO_DIFF_TIMESTAMPS = False
 
@@ -42,7 +43,7 @@ def process_configuration_data(filename=None):
                 break
     if filename is not None:
         if not os.path.isfile(filename):
-            sys.stderr.write('%s is not a valid file.\n' % filename)
+            output.error('%s is not a valid file.\n' % filename)
             sys.exit(cmd_result.ERROR)
         try:
             for line in open(filename).readlines():
@@ -51,7 +52,7 @@ def process_configuration_data(filename=None):
                 key, val = line.strip().split('=', 1)
                 _QUILT_CONFIG_DICT[key] = val.strip('"')
         except IOError:
-            sys.stderr.write('IO errror reading %s.\n' % filename)
+            output.error('IO errror reading %s.\n' % filename)
             sys.exit(cmd_result.ERROR)
     # Environment variables take precedence for some
     _QUILT_CONFIG_DICT['QUILT_PATCHES'] = os.getenv('QUILT_PATCHES', _QUILT_CONFIG_DICT['QUILT_PATCHES'])

@@ -18,7 +18,6 @@
 import os
 import signal
 import subprocess
-import sys
 
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import customization
@@ -89,26 +88,3 @@ else:
                os.access(potential_path, os.X_OK):
                 return potential_path
         return None
-
-class Pager:
-    """Output text to stdout via a pager"""
-    def __init__ (self):
-        """Create a pager"""
-        QUILT_PAGER = os.getenv('QUILT_PAGER', os.getenv('GIT_PAGER', 'less'))
-        if not QUILT_PAGER or QUILT_PAGER == 'cat':
-            self.subproc = None
-        else:
-            os.putenv('LESS', '-FRSX')
-            self.subproc = subprocess.Popen([QUILT_PAGER], stdin=subprocess.PIPE)
-    def write(self, text):
-        if self.subproc is not None:
-            self.subproc.stdin.write(text)
-        else:
-            sys.stdout.write(text)
-    def wait(self, text=None):
-        if text is not None:
-            self.write(text)
-        if self.subproc is not None:
-            self.subproc.stdin.close()
-            return self.subproc.wait()
-        return cmd_result.OK

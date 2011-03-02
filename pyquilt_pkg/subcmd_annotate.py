@@ -22,6 +22,7 @@ from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
 from pyquilt_pkg import customization
 from pyquilt_pkg import shell
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'annotate',
@@ -51,7 +52,7 @@ def annotation_for(old_file, new_file, annotation):
         new_file = '/dev/null'
     result = shell.run_cmd('diff -e "%s" "%s"' % (old_file, new_file))
     if result.eflags > 1:
-        sys.stderr.write(result.stderr)
+        output.error(result.stderr)
         sys.exit(result.eflags)
     difftxt = ''
     start_cre = re.compile('^(\d+)(,\d+)?([acd])$')
@@ -108,7 +109,7 @@ def run_annotate(args):
         files.append(patchfns.backup_file_name(next_patch, opt_file))
     if len(patches) == 0:
         for line in open(files[-1]).readlines():
-            sys.stdout.write('\t%s\n' % line)
+            output.write('\t%s\n' % line)
         return cmd_result.OK
     difftxt = ''
     for index in range(len(patches)):
@@ -118,13 +119,14 @@ def run_annotate(args):
     shell.run_cmd('patch %s' % template, difftxt)
     annotations = [line.rstrip() for line in open(template).readlines()]
     os.remove(template)
-    pager = shell.Pager()
+    output.start_pager()
     if os.path.exists(files[-1]):
         for annotation, line in zip(annotations, open(files[-1]).readlines()):
-            pager.write('%s\t%s' % (annotation, line))
-    pager.write('\n')
+            output.write('%s\t%s' % (annotation, line))
+    output.write('\n')
     for index, patch in zip(range(len(patches)), patches):
-        pager.write('%s\t%s\n' % (index + 1, patchfns.print_patch(patch)))
-    return pager.wait()
+        output.write('%s\t%s\n' % (index + 1, patchfns.print_patch(patch)))
+    output.wait_for_pager()
+    return cmd_result.OK
 
 parser.set_defaults(run_cmd=run_annotate)

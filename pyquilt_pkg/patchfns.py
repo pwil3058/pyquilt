@@ -29,6 +29,7 @@ from pyquilt_pkg import putils
 from pyquilt_pkg import fsutils
 from pyquilt_pkg import quilt
 from pyquilt_pkg import backup
+from pyquilt_pkg import output
 
 DB_VERSION = 2
 
@@ -64,7 +65,7 @@ def version_check():
     if os.path.isfile(ver_file):
         version = int(open(ver_file).read().strip())
         if version > DB_VERSION:
-            sys.stderr.write('The quilt meta-data in this tree has version %s, but this version of quilt can only handle meta-data formats up to and including version %s. Please pop all the patches using the version of quilt used to push them before downgrading.\n' % (version, DB_VERSION))
+            output.error('The quilt meta-data in this tree has version %s, but this version of quilt can only handle meta-data formats up to and including version %s. Please pop all the patches using the version of quilt used to push them before downgrading.\n' % (version, DB_VERSION))
             sys.exit(cmd_result.ERROR)
         return version == DB_VERSION
     return False
@@ -114,7 +115,7 @@ def chdir_to_base_dir(skip_version_check=False):
         try:
             os.chdir(basedir)
         except OSError:
-            sys.stderr.write('Cannot change into parent directory %s' % basedir)
+            output.error('Cannot change into parent directory %s' % basedir)
             sys.exit(cmd_result.ERROR)
         SUBDIR = subdir
         SUBDIR_DOWN = subdir_down
@@ -134,18 +135,18 @@ def chdir_to_base_dir(skip_version_check=False):
         SERIES = os.path.join(QUILT_PATCHES, QUILT_SERIES)
     DB = os.path.join(QUILT_PC, 'applied-patches')
     if not skip_version_check and not version_check():
-        sys.stderr.write('The working tree was created by an older version of quilt. Please run "quilt upgrade".\n')
+        output.error('The working tree was created by an older version of quilt. Please run "quilt upgrade".\n')
         sys.exit(cmd_result.ERROR)
 
 def create_db():
     if not os.path.isdir(QUILT_PC):
         if os.path.exists(QUILT_PC):
-            sys.stderr.write('%s is not a directory.\n' % QUILT_PC)
+            output.error('%s is not a directory.\n' % QUILT_PC)
             sys.exit(cmd_result.ERROR)
         try:
             os.mkdir(QUILT_PC)
         except OSError:
-            sys.stderr.write('Could not create directory %s.\n' % QUILT_PC)
+            output.error('Could not create directory %s.\n' % QUILT_PC)
             sys.exit(cmd_result.ERROR)
         open(os.path.join(QUILT_PC, '.version'), 'w').write('%s\n' % DB_VERSION)
     if not os.path.isfile(os.path.join(QUILT_PC, '.quilt_patches')):
@@ -190,9 +191,9 @@ def find_first_patch():
     if len(patches) > 0:
         return patches[0]
     if os.path.isfile(SERIES):
-        sys.stderr.write('No patches in series\n')
+        output.error('No patches in series\n')
     else:
-        sys.stderr.write('No series file found\n')
+        output.error('No series file found\n')
     return False
 
 # Also remove -R if present.
@@ -245,7 +246,7 @@ def _re_for_finding_patch_in_series(patchname):
 def find_patch(patchname):
     if os.path.exists(SERIES):
         if not os.path.isfile(SERIES):
-            sys.stderr.write('%s is not a regular file\n' % SERIES)
+            output.error('%s is not a regular file\n' % SERIES)
             return False
         can_pacthname = _canonical_patchname(patchname)
         matcher = _re_for_finding_patch_in_series(can_pacthname)
@@ -262,12 +263,12 @@ def find_patch(patchname):
                 # extension expansion.  Otherwise we're confused
                 if candidate == can_pacthname:
                     return candidate
-            sys.stderr.write('%s has too many matches in series:\n' % patchname)
+            output.error('%s has too many matches in series:\n' % patchname)
             for candidate in candidates:
-                 sys.stderr.write('\t%s\n' % candidate)
+                 output.error('\t%s\n' % candidate)
             return False
     if find_first_patch():
-        sys.stderr.write('Patch %s is not in series\n' % patchname)
+        output.error('Patch %s is not in series\n' % patchname)
     return False
 
 def cat_series():
@@ -293,7 +294,7 @@ def top_patch():
 def find_top_patch():
     result = top_patch()
     if not result and find_first_patch():
-        sys.stderr.write('No patches applied\n')
+        output.error('No patches applied\n')
     return result
 
 def is_applied(patchname):
@@ -326,7 +327,7 @@ def find_applied_patch(patchname=None):
         patch = find_patch(patchname)
         if patch:
             if not is_applied(patch):
-                sys.stderr.write('Patch %s is not applied\n' % print_patch(patch))
+                output.error('Patch %s is not applied\n' % print_patch(patch))
                 return False
             return patch
         else:
@@ -404,21 +405,21 @@ def patch_after(patch):
 
 def insert_in_series(patch, patch_args=None, before=None):
     if os.path.exists(SERIES) and not os.path.isfile(SERIES):
-        sys.stderr.write('%s is not a regular file\n' % SERIES)
+        output.error('%s is not a regular file\n' % SERIES)
         sys.exit(cmd_result.ERROR)
     if before is None:
         before = patch_after(top_patch())
     try:
         tmpfile = os.tmpfile()
     except OSError:
-        sys.stderr.write('Unable to create temporary file\n')
+        output.error('Unable to create temporary file\n')
         sys.exit(cmd_result.ERROR)
     series_dir = os.path.dirname(SERIES)
     if not os.path.isdir(series_dir):
         try:
             os.mkdir(series_dir)
         except OSError:
-            sys.stderr.write('Could not create directory %s\n', series_dir)
+            output.error('Could not create directory %s\n', series_dir)
             sys.exit(cmd_result.ERROR)
     if before:
         rec = re.compile(r'^' + re.escape(before) + r'(\s.*)?$')
@@ -558,7 +559,7 @@ def apply_patch_temporarily(workdir, patch, *files):
     args = patch_args(patch)
     srcdir = os.path.join(QUILT_PC, patch)
     if not backup.restore(srcdir, to_dir=workdir, filelist=files, keep=True):
-        sys.stderr.write('Failed to copy files to temporary directory\n')
+        output.error('Failed to copy files to temporary directory\n')
         return False
     if os.path.isfile(patch_file) and os.path.getsize(patch_file) > 0:
         text = fsutils.get_file_contents(patch_file)
@@ -569,7 +570,7 @@ def apply_patch_temporarily(workdir, patch, *files):
             # applied, we know that it won't apply cleanly. In
             # all other cases, print a warning.
             if not os.path.isfile(os.path.join(QUILT_PC, patch + '~refresh')) and len(files) == 0:
-                sys.stderr.write('Failed to patch temporary files\n')
+                output.error('Failed to patch temporary files\n')
                 return False
     return True
 
@@ -597,7 +598,7 @@ def find_unapplied_patch(name=None):
         if not patch:
             return False
         if is_applied(patch):
-            sys.stdout.write('Patch %s is currently applied\n' % print_patch(patch))
+            output.write('Patch %s is currently applied\n' % print_patch(patch))
             return False
         return patch
     else:
@@ -606,7 +607,7 @@ def find_unapplied_patch(name=None):
             return find_first_patch()
         patch = patch_after(start)
         if not patch:
-            sys.stdout.write('File series fully applied, ends at patch %s\n' % print_patch(start))
+            output.write('File series fully applied, ends at patch %s\n' % print_patch(start))
             return False
         return patch
 
@@ -627,7 +628,7 @@ def in_valid_dir(filename):
     while dirpath:
         for invalid_dir in [QUILT_PATCHES, QUILT_PC]:
             if os.path.samefile(dirpath, invalid_dir):
-                sys.stderr.write('File %s is located below %s\n' % (filename, invalid_dir + os.sep))
+                output.error('File %s is located below %s\n' % (filename, invalid_dir + os.sep))
                 return False
         dirpath = os.path.dirname(dirpath)
     return True

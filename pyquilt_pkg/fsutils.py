@@ -20,6 +20,8 @@ import gzip
 import bz2
 import os
 
+from pyquilt_pkg import output
+
 def get_file_contents(srcfile):
     '''
     Get the contents of filename to text after applying decompression
@@ -41,7 +43,7 @@ def get_file_contents(srcfile):
     else:
         return open(srcfile).read()
     if res != 0:
-        sys.stderr.write(serr)
+        output.error(serr)
     return text
 
 def set_file_contents(filename, text):
@@ -70,7 +72,7 @@ def set_file_contents(filename, text):
     elif ext == '.lzma':
         res, text, serr = shell.run_cmd('lzma -c', text)
     if res != 0:
-        sys.stderr.write(serr)
+        output.error(serr)
         return False
     try:
         open(filename, 'w').write(text)

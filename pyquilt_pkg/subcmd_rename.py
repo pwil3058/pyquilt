@@ -13,12 +13,12 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'rename',
@@ -61,7 +61,7 @@ def run_rename(args):
     new_patch_exists = True if new_patch_exists else os.path.isdir(os.path.join(patchfns.QUILT_PC, new_patch))
     new_patch_exists = True if new_patch_exists else os.path.exists(patchfns.patch_file_name(new_patch))
     if new_patch_exists:
-        sys.stderr.write('Patch %s exists already, please choose a different name\n' % patchfns.print_patch(new_patch))
+        output.error('Patch %s exists already, please choose a different name\n' % patchfns.print_patch(new_patch))
         return cmd_result.ERROR
     is_ok = True
     if patchfns.is_applied(patch):
@@ -73,10 +73,10 @@ def run_rename(args):
         if is_ok and os.path.exists(patchfns.patch_file_name(patch)):
             is_ok = move_file(patchfns.patch_file_name(patch), patchfns.patch_file_name(new_patch))
     if is_ok:
-        sys.stdout.write('Patch %s renamed to %s\n' % (patchfns.print_patch(patch), patchfns.print_patch(new_patch)))
+        output.write('Patch %s renamed to %s\n' % (patchfns.print_patch(patch), patchfns.print_patch(new_patch)))
         return cmd_result.OK
     else:
-        sys.stderr.write('Renaming of patch %s to %s failed\n' % (patchfns.print_patch(patch), patchfns.print_patch(new_patch)))
+        output.error('Renaming of patch %s to %s failed\n' % (patchfns.print_patch(patch), patchfns.print_patch(new_patch)))
         return cmd_result.ERROR
 
 parser.set_defaults(run_cmd=run_rename)

@@ -19,7 +19,7 @@ from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
 from pyquilt_pkg import customization
-from pyquilt_pkg import shell
+from pyquilt_pkg import output
 from pyquilt_pkg import colour
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
@@ -45,7 +45,7 @@ parser.add_argument(
 
 def run_series(args):
     patchfns.chdir_to_base_dir()
-    pager = shell.Pager()
+    output.start_pager()
     do_colorize = args.opt_color == 'always' or (args.opt_color == 'auto' and sys.stderr.isatty())
     if do_colorize:
         colour.set_up()
@@ -53,15 +53,16 @@ def run_series(args):
         top = patchfns.top_patch()
         for patch in patchfns.patches_before(top):
             string = '+ %s\n' % patchfns.print_patch(patch)
-            pager.write(colour.wrap(string, 'series_app') if do_colorize else string)
+            output.write(colour.wrap(string, 'series_app') if do_colorize else string)
         string = '= %s\n' % patchfns.print_patch(top)
-        pager.write(colour.wrap(string, 'series_top') if do_colorize else string)
+        output.write(colour.wrap(string, 'series_top') if do_colorize else string)
         for patch in patchfns.patches_after(top):
             string = '  %s\n' % patchfns.print_patch(patch)
-            pager.write(colour.wrap(string, 'series_una') if do_colorize else string)
+            output.write(colour.wrap(string, 'series_una') if do_colorize else string)
     else:
         for patch in patchfns.cat_series():
-            pager.write('%s\n' % patchfns.print_patch(patch))
-    return pager.wait()
+            output.write('%s\n' % patchfns.print_patch(patch))
+    output.wait_for_pager()
+    return cmd_result.OK
 
 parser.set_defaults(run_cmd=run_series)

@@ -19,7 +19,7 @@ from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
 from pyquilt_pkg import customization
-from pyquilt_pkg import shell
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'applied',
@@ -38,9 +38,10 @@ def run_applied(args):
     patch = patchfns.find_applied_patch(args.patch)
     if not patch:
         return cmd_result.ERROR
-    pager = shell.Pager()
+    output.start_pager()
     for patch in patchfns.applied_before(patch) + [patch]:
-        pager.write('%s\n' % patchfns.print_patch(patch))
-    return pager.wait()
+        output.write('%s\n' % patchfns.print_patch(patch))
+    output.wait_for_pager()
+    return cmd_result.OK
 
 parser.set_defaults(run_cmd=run_applied)

@@ -28,6 +28,7 @@ import errno
 import tempfile
 import stat
 import collections
+from pyquilt_pkg import output
 
 def _create_parents(filename):
     last_sep = filename.rfind(os.sep)
@@ -40,7 +41,7 @@ def _create_parents(filename):
             try:
                 os.mkdir(dirname, 0777)
             except OSError:
-                sys.stderr.write('Could not create directory %s.\n' % dirname)
+                output.error('Could not create directory %s.\n' % dirname)
                 sys.exit(1)
         next_sep = filename.find(os.sep, next_sep + 1)
 
@@ -69,15 +70,6 @@ def _copy_fd(from_fd, to_fd):
             total += os.write(to_fd, data[total:])
     return True
 
-def _perror(edata, prefix=None):
-    if prefix:
-        sys.stderr.write('%s: %s\n' % (prefix, edata.strerror))
-    else:
-        try:
-            sys.stderr.write('%s: %s\n' % (edata.filename, edata.strerror))
-        except AttributeError:
-            sys.stderr.write('%s\n' % edata.strerror)
-
 def _creat(name, mode=0777):
     return os.open(name, os.O_WRONLY|os.O_CREAT|os.O_TRUNC, mode)
 
@@ -86,26 +78,26 @@ def _copy_file(from_fn, stat_data, to_fn):
     try:
         from_fd = os.open(from_fn, os.O_RDONLY)
     except OSError as edata:
-        _perror(edata)
+        output.perror(edata)
         return False
     try:
         # make sure we don't inherit this file's mode.
         os.unlink(to_fn)
     except OSError as edata:
         if edata.errno != errno.ENOENT:
-            _perror(edata)
+            output.perror(edata)
             return False
     try:
         to_fd = _creat(to_fn, mode=stat_data.st_mode)
     except OSError as edata:
-        _perror(edata);
+        output.perror(edata);
         os.close(from_fd);
         return False
     os.fchmod(to_fd, stat_data.st_mode)
     try:
         _copy_fd(from_fd, to_fd)
     except OSError as edata:
-        _perror(edata, '%s -> %s' % (from_fn, to_fn))
+        output.perror(edata, '%s -> %s' % (from_fn, to_fn))
         os.unlink(to_fn)
         return False
     finally:
@@ -118,7 +110,7 @@ def _link_or_copy_file(from_fn, stat_data, to_fn):
         os.link(from_fn, to_fn)
     except OSError as edata:
         if edata.errno not in [errno.EXDEV, errno.EPERM, errno.EMLINK, errno.ENOSYS]:
-            _perror(edata, 'Could not link file \`%s\' to \`%s\'' % (from_fn, to_fn))
+            output.perror(edata, 'Could not link file \`%s\' to \`%s\'' % (from_fn, to_fn))
             return False
     else:
         return True
@@ -128,7 +120,7 @@ def ensure_nolinks(filename):
     try:
         stat_data = os.stat(filename)
     except OSError as edata:
-        _perror(edata)
+        output.perror(edata)
         return False
     if stat_data.st_nlink > 1:
         from_fd = to_fd = None
@@ -141,7 +133,7 @@ def ensure_nolinks(filename):
             os.rename(tmpname, filename)
             return True;
         except OSError as edata:
-            _perror(edata)
+            output.perror(edata)
             return False
         finally:
             if from_fd is not None:
@@ -165,20 +157,20 @@ def backup(bu_dir, filelist, verbose=False):
             os.unlink(backup)
         except OSError as edata:
             if edata.errno != errno.ENOENT:
-                _perror(edata)
+                output.perror(edata)
                 return False
         _create_parents(backup)
         if missing_file:
             if verbose:
-                sys.stdout.write('New file %s\n' % file_nm)
+                output.write('New file %s\n' % file_nm)
             try:
                 os.close(_creat(backup, mode=0666))
             except OSError as edata:
-                _perror(edata)
+                output.perror(edata)
                 return False
         else:
             if verbose:
-                sys.stdout.write('Copying %s\n' % file_nm)
+                output.write('Copying %s\n' % file_nm)
             if stat_data.st_nlink == 1:
                 result = _copy_file(file_nm, stat_data, backup)
                 if result is not True:
@@ -206,23 +198,23 @@ def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=
         try:
             stat_data = os.stat(backup)
         except OSError as edata:
-            _perror(edata, backup)
+            output.perror(edata, backup)
             return False
         if stat_data.st_size == 0:
             try:
                 os.unlink(file_nm)
             except OSError as edata:
                 if edata.errno != errno.ENOENT:
-                    _perror(edata, file_nm)
+                    output.perror(edata, file_nm)
                     return False
             if verbose:
-                sys.stdout.write('Removing %s\n' % file_nm)
+                output.write('Removing %s\n' % file_nm)
             if not keep:
                 os.unlink(backup)
                 _remove_parents(backup)
         else:
             if verbose:
-                sys.stdout.write('Restoring %s\n' % file_nm)
+                output.write('Restoring %s\n' % file_nm)
             try:
                 os.unlink(file_nm)
             except OSError as edata:
@@ -250,7 +242,7 @@ def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=
                     if not restore_file(filename):
                         return False
         except OSError as edata:
-            _perror(edata)
+            output.perror(edata)
             return False
     else:
         for filename in filelist:
@@ -269,11 +261,11 @@ def ensure_nolinks_in_dir(in_dir, verbose=False):
             for filename in filenames:
                 filename = os.path.join(basedir, filename)
                 if verbose:
-                    sys.stdout.write('Delinking %s\n' % filename)
+                    output.write('Delinking %s\n' % filename)
                 if not ensure_nolinks(filename):
                     return False
     except IOError as edata:
-        _perror(edata)
+        output.perror(edata)
         return False
     return True
 
@@ -283,15 +275,15 @@ def remove(bu_dir, filelist=False, verbose=False):
     def remove_file(backup):
         try:
             if verbose:
-                sys.stdout.write('Removing %s\n' % backup)
+                output.write('Removing %s\n' % backup)
             os.unlink(backup)
         except OSError as edata:
-            _perror(edata, backup)
+            output.perror(edata, backup)
             return False
         try:
             _remove_parents(backup)
         except IOError as edata:
-            _perror(edata, backup)
+            output.perror(edata, backup)
             return False
         return True
     if not os.path.isdir(bu_dir):
@@ -306,7 +298,7 @@ def remove(bu_dir, filelist=False, verbose=False):
                     if not remove_file(filename):
                         return False
         except IOError as edata:
-            _perror(edata)
+            output.perror(edata)
             return False
     else:
         for filename in filelist:

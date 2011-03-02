@@ -13,7 +13,6 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import sys
 import os
 import tarfile
 import errno
@@ -21,6 +20,7 @@ import errno
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
+from pyquilt_pkg import output
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'setup',
@@ -73,11 +73,11 @@ def check_for_existing_files(args, script):
     for dircty in dircty_set:
         patch_dir = os.path.join(dircty, patchfns.QUILT_PATCHES)
         if os.path.exists(patch_dir):
-            sys.stderr.write('Directory %s exists\n' % patch_dir)
+            output.error('Directory %s exists\n' % patch_dir)
             status = True
         series_file = os.path.join(dircty, patchfns.QUILT_SERIES)
         if os.path.exists(patch_dir):
-            sys.stderr.write('File %s exists\n' % series_file)
+            output.error('File %s exists\n' % series_file)
             status = True
     return status
 
@@ -123,22 +123,22 @@ def run_setup(args):
         if action[0] == 'tar':
             tarball = os.path.join(args.sourcedir, action[2]) if args.sourcedir else action[2]
             if not os.path.exists(tarball):
-                sys.stderr.write('File %s not found\n' % tarball)
+                output.error('File %s not found\n' % tarball)
                 return cmd_result.ERROR
-            sys.stdout.write('Unpacking archive %s\n' % tarball)
+            output.write('Unpacking archive %s\n' % tarball)
             target_dir = os.path.join(args.prefix, action[1]) if args.prefix else action[1]
             try:
                 os.makedirs(target_dir)
             except OSError as edata:
                 if edata.errno != errno.EEXIST:
-                    sys.stderr.write('%s: %s\n' % (target_dir, edata.strerror))
+                    output.error('%s: %s\n' % (target_dir, edata.strerror))
                     return cmd_result.ERROR
             if tarfile.is_tarfile(tarball):
                 tarobj = tarfile.open(tarball, 'r')
                 tarobj.extractall(target_dir)
                 tarobj.close()
             else:
-                sys.stderr.write('%s: is not a supported tar format\n' % tarball)
+                output.error('%s: is not a supported tar format\n' % tarball)
                 return cmd_result.ERROR
     tar_dir = tar_file = None
     for action in script:
