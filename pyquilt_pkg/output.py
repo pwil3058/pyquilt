@@ -18,6 +18,7 @@
 import subprocess
 import sys
 import os
+import errno
 
 _PAGER = None
 
@@ -29,20 +30,34 @@ def start_pager():
         _PAGER = subprocess.Popen([QUILT_PAGER], stdin=subprocess.PIPE)
 
 def wait_for_pager():
+    global _PAGER
     if _PAGER is not None:
         _PAGER.stdin.close()
-        return _PAGER.wait()
+        rval = _PAGER.wait()
+        _PAGER = None
+        return rval
 
 def write(text):
     if _PAGER:
-        _PAGER.stdin.write(text)
+        try:
+            _PAGER.stdin.write(text)
+        except IOError as edata:
+            if edata.errno != errno.EPIPE:
+                raise edata
     else:
         sys.stdout.write(text)
         sys.stdout.flush()
 
+_SWALLOW_ERRORS = False
+
+def set_swallow_errors(value):
+    global _SWALLOW_ERRORS
+    _SWALLOW_ERRORS = value
+
 def error(text):
-    sys.stderr.write(text)
-    sys.stderr.flush()
+    if not _SWALLOW_ERRORS:
+        sys.stderr.write(text)
+        sys.stderr.flush()
 
 def perror(exception, prefix=None):
     if prefix:

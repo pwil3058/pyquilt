@@ -268,6 +268,26 @@ def get_patch_descr(path):
     else:
         return ''.join(lines)
 
+def get_patch_hdr_lines(path):
+    try:
+        buf = fsutils.get_file_contents(path)
+    except IOError:
+        return (False, None)
+    lines = buf.splitlines(True)
+    diffstat_si, patch = _trisect_patch_lines(lines)
+    if patch is None:
+        res = lines
+    else:
+        res = lines[0:patch[0]]
+    return (True,  res)
+
+def get_patch_hdr(path):
+    ok, lines = get_patch_hdr_lines(path)
+    if not ok:
+        return ''
+    else:
+        return ''.join(lines)
+
 def get_patch_diff_fm_text(textbuf):
     lines = textbuf.splitlines(True)
     _, patch = _trisect_patch_lines(lines)
@@ -324,6 +344,32 @@ def set_patch_descr_lines(path, lines):
         if os.path.exists(tmpf_name):
             os.remove(tmpf_name)
     return ret
+
+def set_patch_descr(path, text):
+    return set_patch_descr_lines(path, text.splitlines(True))
+
+def set_patch_hdr_lines(path, lines):
+    if os.path.exists(path):
+        res, parts = _trisect_patch_file(path)
+        if not res:
+            return False
+    else:
+        parts = ([], [], [])
+    comments = [line for line in parts[0] if line.startswith('#')]
+    tmpf_name = _lines_to_temp_file(comments + lines + parts[2], path)
+    if not tmpf_name:
+        return False
+    try:
+        os.rename(tmpf_name, path)
+        ret = True
+    except IOError:
+        ret = False
+        if os.path.exists(tmpf_name):
+            os.remove(tmpf_name)
+    return ret
+
+def set_patch_hdr(path, text):
+    return set_patch_descr_lines(path, text.splitlines(True))
 
 ADDED = "A"
 EXTANT = "M"

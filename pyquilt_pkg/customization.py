@@ -30,6 +30,7 @@ _QUILT_CONFIG_DICT = {
         'QUILT_PATCHES': 'patches',
         'QUILT_SERIES': 'series',
         'QUILT_PC': '.pc',
+        'QUILT_BACKUP': False,
     }
 
 _config_line_re = re.compile(r'(^[^=]+)=(.*)$')
@@ -55,7 +56,8 @@ def process_configuration_data(filename=None):
             output.error('IO errror reading %s.\n' % filename)
             sys.exit(cmd_result.ERROR)
     # Environment variables take precedence for some
-    _QUILT_CONFIG_DICT['QUILT_PATCHES'] = os.getenv('QUILT_PATCHES', _QUILT_CONFIG_DICT['QUILT_PATCHES'])
+    for var in ['QUILT_PATCHES', 'QUILT_BACKUP']:
+        _QUILT_CONFIG_DICT[var] = os.getenv(var, _QUILT_CONFIG_DICT[var])
 
 def get_default_args(parser, key):
     args = _QUILT_CONFIG_DICT.get('QUILT_%s_ARGS' % key.upper(), '')

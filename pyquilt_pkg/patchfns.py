@@ -39,6 +39,8 @@ QUILT_SERIES = None
 
 QUILT_PC = None
 
+ORIGINAL_LANG = os.getenv('LANG', '')
+
 SUBDIR = ''
 SUBDIR_DOWN = 0
 
@@ -200,22 +202,33 @@ def find_first_patch():
 def change_db_strip_level(level, patch):
     level = '' if level == '-p1' else level
     if os.path.exists(SERIES):
-        rec = re.compile(r'^(' + re.escape(patch) + r')(\s+.*)\n$')
+        rec = re.compile(r'^(' + re.escape(patch) + r')(\s+.*)?\n$')
         lines = open(SERIES).readlines()
         for index in range(len(lines)):
             match = rec.match(lines[index])
             if match:
-                patch_args = match.group(2).split()
+                if not match.group(2):
+                    if level:
+                        lines[index] = '%s %s\n' % (match.group(1), level)
+                    break
+                parts = match.group(2).split('#', 1)
+                patch_args = parts[0].split()
                 if '-R' in patch_args:
                     patch_args.remove('-R')
-                for aindex in patch_args:
+                changed = False
+                for aindex in range(len(patch_args)):
                     if patch_args[aindex].startswith('-p'):
                         patch_args[aindex] = level
+                        changed = True
+                if not changed and level:
+                    patch_args.append(level)
+                if len(parts) == 2:
+                    patch_args.append('#' + parts[1])
                 pa_str = ' '.join(patch_args).strip()
                 if pa_str:
-                    lines[index] = '%s %s\n' % (group(1), group(2))
+                    lines[index] = '%s %s\n' % (match.group(1), pa_str)
                 else:
-                    lines[index] = '%s\n' % group(1)
+                    lines[index] = '%s\n' % match.group(1)
                 open(SERIES, 'w').writelines(lines)
                 break
     else:
@@ -421,6 +434,7 @@ def insert_in_series(patch, patch_args=None, before=None):
         except OSError:
             output.error('Could not create directory %s\n', series_dir)
             sys.exit(cmd_result.ERROR)
+    new_line = patch if not patch_args else ' '.join([patch, patch_args])
     if before:
         rec = re.compile(r'^' + re.escape(before) + r'(\s.*)?$')
         series_lines = open(SERIES).readlines()
@@ -428,7 +442,7 @@ def insert_in_series(patch, patch_args=None, before=None):
         index = 0
         while index < num_lines:
             if rec.match(series_lines[index]):
-                tmpfile.write('%s\n' % patch)
+                tmpfile.write('%s\n' % new_line)
                 break
             else:
                 tmpfile.write(series_lines[index])
@@ -440,7 +454,7 @@ def insert_in_series(patch, patch_args=None, before=None):
         if os.path.exists(SERIES):
             for line in open(SERIES).readlines():
                 tmpfile.write(line)
-        tmpfile.write('%s\n' % patch)
+        tmpfile.write('%s\n' % new_line)
     try:
         tmpfile.seek(0)
         open(SERIES, 'w').write(tmpfile.read())
@@ -498,6 +512,18 @@ def remove_from_db(patch):
         return True
     except IOError:
         return False
+
+def find_patch_file(name):
+    """Find the patch file with the given name"""
+    if os.path.exists(name) and os.access(name, os.R_OK):
+        return name
+    output.set_swallow_errors(True)
+    patch = find_patch_in_series(name)
+    output.set_swallow_errors(False)
+    if not patch:
+        output.error('Patch %s does not exist\n' % name)
+        return False
+    return patch_file_name(patch)
 
 def files_in_patch(patch):
     path = os.path.join(QUILT_PC, patch)

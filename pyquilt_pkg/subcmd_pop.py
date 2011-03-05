@@ -114,7 +114,7 @@ def files_may_have_changed(patch):
     if tsf_mt < os.path.getmtime(patch_file):
         return True
     for file_nm in patchfns.files_in_patch(patch):
-        if tsf_mt < os.path.getmtime(file_nm):
+        if os.path.exists(file_nm) and tsf_mt < os.path.getmtime(file_nm):
             return True
     return False
 

@@ -49,11 +49,11 @@ def diff_file(filnm, old_file, new_file, args):
     # protect against referencing unset variables
     index = old_hdr = new_hdr = line = None
     new_date = old_date = ''
-    opt_strip_level = 1 if args.opt_strip_level is None else args.opt_strip_level
+    opt_strip_level = '1' if args.opt_strip_level is None else args.opt_strip_level
     if opt_strip_level == 'ab':
         old_hdr = os.path.join('a', filnm)
         new_hdr = os.path.join('b', filnm)
-    elif opt_strip_level == 0:
+    elif opt_strip_level == '0':
         old_hdr = filnm + '.orig'
         new_hdr = filnm
     else:
@@ -70,7 +70,7 @@ def diff_file(filnm, old_file, new_file, args):
     elif use_timestamps:
         old_date = '\t%s' % file_mtime_as_string(old_file)
     if not os.path.exists(new_file) or os.path.getsize(new_file) == 0:
-        if opt_strip_level == 0:
+        if opt_strip_level == '0':
             old_hdr = new_hdr
         new_file = '/dev/null'
         new_hdr = '/dev/null'

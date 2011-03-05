@@ -30,3 +30,6 @@ from pyquilt_pkg import subcmd_setup
 from pyquilt_pkg import subcmd_annotate
 from pyquilt_pkg import subcmd_series
 from pyquilt_pkg import subcmd_applied
+from pyquilt_pkg import subcmd_import
+from pyquilt_pkg import subcmd_header
+from pyquilt_pkg import subcmd_fork

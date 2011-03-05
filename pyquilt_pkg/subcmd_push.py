@@ -163,10 +163,10 @@ def cleanup_patch_output(text, args):
         for line in text.splitlines(True):
             pnm = cre1.match(line)
             if pnm:
-                ret += line
                 filename = pnm.group(1)
-            else:
                 ret += cre2.sub(' -- rejects in file %s' % filename, line)
+            else:
+                ret += line
     return ret
 
 _FAIL_CRE = re.compile('FAILED|hunks? ignored|can\'t find file|file .* already exists|NOT MERGED')
@@ -297,6 +297,7 @@ def run_push(args):
     is_ok = True
     for patch in patches:
         is_ok = add_patch(patch)
+        output.write('\n')
         if not is_ok:
             break
     if is_ok:
