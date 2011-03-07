@@ -194,7 +194,6 @@ def remove_patch(patch, force, check, silent):
 def run_pop(args):
     number = stop_at_patch = None
     patchfns.chdir_to_base_dir()
-    customization.merge_default_args(args, parser, 'pop')
     if args.patchnamornum:
         if args.patchnamornum.isdigit():
             number = int(args.patchnamornum)

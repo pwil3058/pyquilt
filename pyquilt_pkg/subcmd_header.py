@@ -104,7 +104,6 @@ def run_header(args):
         else:
             putils.set_patch_hdr(pfile, text)
     patchfns.chdir_to_base_dir()
-    customization.merge_default_args(args, parser, 'header')
     if not args.opt_backup:
         args.opt_backup = customization.get_config('QUILT_BACKUP')
     patch = patchfns.find_patch_in_series(args.arg_patch)

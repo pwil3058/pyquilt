@@ -169,7 +169,6 @@ def run_refresh(args):
             shutil.rmtree(workdir)
         return status
     patchfns.chdir_to_base_dir()
-    customization.merge_default_args(args, parser, 'refresh')
     patch = patchfns.find_applied_patch(args.patchname)
     if not patch:
         return cmd_result.ERROR

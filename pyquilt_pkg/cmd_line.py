@@ -19,6 +19,10 @@ mechanism for sub commands to add their components.
 '''
 
 import argparse
+import sys
+import os
+
+from pyquilt_pkg import customization
         
 PARSER = argparse.ArgumentParser(description='Manage stacked patches')
 
@@ -34,4 +38,14 @@ PARSER.add_argument(
     metavar='file'
 )
 
-SUB_CMD_PARSER = PARSER.add_subparsers(title='commands')
+SUB_CMD_PARSER = PARSER.add_subparsers(title='commands', dest='sub_cmd_name')
+
+def parse_args():
+    """Parse the command line, merge with (custom) defaults and return the result"""
+    args = PARSER.parse_args()
+    customization.process_configuration_data(args.quiltrc if args.quiltrc else os.getenv('QUILTRC', None))
+    default_args = customization.get_default_args(args.sub_cmd_name).split()
+    if default_args:
+        # Command line has precedence so put them last
+        args = PARSER.parse_args([args.sub_cmd_name] + default_args + sys.argv[sys.argv.index(args.sub_cmd_name) + 1:])
+    return args

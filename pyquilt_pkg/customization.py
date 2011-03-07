@@ -59,21 +59,8 @@ def process_configuration_data(filename=None):
     for var in ['QUILT_PATCHES', 'QUILT_BACKUP']:
         _QUILT_CONFIG_DICT[var] = os.getenv(var, _QUILT_CONFIG_DICT[var])
 
-def get_default_args(parser, key):
-    args = _QUILT_CONFIG_DICT.get('QUILT_%s_ARGS' % key.upper(), '')
-    if not args:
-        return None
-    actual_args = sys.argv[sys.argv.index(key) + 1:]
-    return parser.parse_args(args.split() + actual_args)
-
-def merge_default_args(args, parser, key):
-    default_args = get_default_args(parser, key)
-    if not default_args:
-        return
-    # Get dictionary keys from default args as they are a subset of args's
-    for arg in default_args.__dict__:
-        if not args.__dict__[arg]:
-            args.__dict__[arg] = default_args.__dict__[arg]
+def get_default_args(key):
+    return _QUILT_CONFIG_DICT.get('QUILT_%s_ARGS' % key.upper(), '')
 
 def get_default_opts(key):
     return _QUILT_CONFIG_DICT.get('QUILT_%s_OPTS' % key.upper(), '')
