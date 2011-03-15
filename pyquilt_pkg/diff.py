@@ -84,7 +84,7 @@ def diff_file(filnm, old_file, new_file, args):
     result = shell.run_cmd(cmd)
     if result.eflags == 1:
         if not _get_no_diff_index(args):
-            index_str = 'Index: %s\n%s\n' % (index, '=' * 70)
+            index_str = 'Index: %s\n%s\n' % (index, '=' * 67)
             result = result._replace(stdout=index_str + result.stdout)
     return result
 

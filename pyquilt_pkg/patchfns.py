@@ -434,7 +434,10 @@ def insert_in_series(patch, patch_args=None, before=None):
         except OSError:
             output.error('Could not create directory %s\n', series_dir)
             sys.exit(cmd_result.ERROR)
-    new_line = patch if not patch_args else ' '.join([patch] + patch_args)
+    if isinstance(patch_args, str):
+        new_line = patch if not patch_args else ' '.join([patch, patch_args])
+    else:
+        new_line = patch if not patch_args else ' '.join([patch] + patch_args)
     if before:
         rec = re.compile(r'^' + re.escape(before) + r'(\s.*)?$')
         series_lines = open(SERIES).readlines()
@@ -579,6 +582,14 @@ def patch_strip_level(patch):
 
 def patch_header(patch_filnm):
     return putils.get_patch_descr(patch_filnm)
+
+def first_modified_by(filename, patches):
+    if not patches:
+        patches = applied_patches()
+    for patch in patches:
+        if os.path.isfile(os.path.join(QUILT_PC, patch, filename)):
+            return patch
+    return None
 
 def apply_patch_temporarily(workdir, patch, *files):
     patch_file = patch_file_name(patch)
