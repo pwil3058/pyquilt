@@ -398,7 +398,7 @@ def patches_before(patch):
     """Return list of patches in series before the nominated patch"""
     full_series = _get_series()
     if not patch or patch not in full_series:
-        return full_series
+        return []
     patch_index = full_series.index(patch)
     return full_series[:patch_index]
 

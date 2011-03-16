@@ -54,8 +54,9 @@ def run_series(args):
         for patch in patchfns.patches_before(top):
             string = '+ %s\n' % patchfns.print_patch(patch)
             output.write(colour.wrap(string, 'series_app') if do_colorize else string)
-        string = '= %s\n' % patchfns.print_patch(top)
-        output.write(colour.wrap(string, 'series_top') if do_colorize else string)
+        if top:
+            string = '= %s\n' % patchfns.print_patch(top)
+            output.write(colour.wrap(string, 'series_top') if do_colorize else string)
         for patch in patchfns.patches_after(top):
             string = '  %s\n' % patchfns.print_patch(patch)
             output.write(colour.wrap(string, 'series_una') if do_colorize else string)
