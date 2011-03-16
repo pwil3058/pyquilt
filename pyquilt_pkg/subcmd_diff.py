@@ -275,7 +275,7 @@ def run_diff(args):
     if args.opt_sort:
         files.sort()
     if args.opt_relative:
-        workdir = patchfns.gen_tempfile(os.path.join(os.getcwd(), 'quilt'), isdir=True)
+        workdir = patchfns.gen_tempfile(os.path.join(os.getcwd(), 'quilt'), asdir=True)
         atexit.register(clean_up, workdir)
         if not patchfns.apply_patch_temporarily(workdir, last_patch, files):
             return cmd_result.ERROR

@@ -591,7 +591,7 @@ def first_modified_by(filename, patches):
             return patch
     return None
 
-def apply_patch_temporarily(workdir, patch, *files):
+def apply_patch_temporarily(workdir, patch, files=None):
     patch_file = patch_file_name(patch)
     args = patch_args(patch)
     srcdir = os.path.join(QUILT_PC, patch)
