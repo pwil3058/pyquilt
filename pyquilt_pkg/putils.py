@@ -478,7 +478,7 @@ def _get_combined_diff_files(lines, i, strip_req_level=strip_one_level):
     return files
 
 def get_patch_files(path, status=True, decorated=False, strip_level=1):
-    strip_level = strip_zero_levels if strip_level == 0 else strip_one_level
+    strip_level = strip_zero_levels if int(strip_level) == 0 else strip_one_level
     try:
         buf = fsutils.get_file_contents(path)
     except IOError:

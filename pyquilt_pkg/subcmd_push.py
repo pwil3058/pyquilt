@@ -158,15 +158,14 @@ def cleanup_patch_output(text, args):
         for line in text.splitlines(True):
             ret += cre.sub('', line)
     else:
-        cre1 = re.compile('^patching file (.*).')
+        cre1 = re.compile('^patching file (.*)\.?')
         cre2 = re.compile('( -- saving rejects to (file )?.*)')
+        replstr = ''
         for line in text.splitlines(True):
             pnm = cre1.match(line)
             if pnm:
-                filename = pnm.group(1)
-                ret += cre2.sub(' -- rejects in file %s' % filename, line)
-            else:
-                ret += line
+                replstr = ' -- rejects in file %s' % pnm.group(1)
+            ret += cre2.sub(replstr, line)
     return ret
 
 _FAIL_CRE = re.compile('FAILED|hunks? ignored|can\'t find file|file .* already exists|NOT MERGED')
@@ -277,7 +276,8 @@ def run_push(args):
     if not stop_at_patch:
         return cmd_result.ERROR
     silent_unless_verbose = '-s' if not args.opt_verbose else None
-    opt_leave_rejects = 1 if args.opt_force else None
+    if args.opt_force:
+        args.opt_leave_rejects = True
     more_patch_args = ' -s' if args.opt_quiet else ''
     more_patch_args += ' -f' if not args.opt_force or args.opt_quiet else ''
     if args.opt_merge is 'default':
@@ -296,7 +296,7 @@ def run_push(args):
     is_ok = True
     for patch in patches:
         is_ok = add_patch(patch)
-        output.write('\n')
+        #output.write('\n')
         if not is_ok:
             break
     if is_ok:
