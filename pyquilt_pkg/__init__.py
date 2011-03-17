@@ -35,3 +35,5 @@ from pyquilt_pkg import subcmd_header
 from pyquilt_pkg import subcmd_fork
 from pyquilt_pkg import subcmd_diff
 from pyquilt_pkg import subcmd_revert
+from pyquilt_pkg import subcmd_files
+from pyquilt_pkg import subcmd_edit

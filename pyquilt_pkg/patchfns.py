@@ -175,7 +175,7 @@ def print_patch(patchname):
     else:
         return patchname
 
-def quilt_command(cmd):
+def pyquilt_command(cmd):
     from pyquilt_pkg import cmd_line
     args = cmd_line.PARSER.parse_args(cmd.split())
     return args.run_cmd(args)

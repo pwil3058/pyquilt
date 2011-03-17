@@ -74,7 +74,7 @@ def run_delete(args):
         if patch != patchfns.top_patch():
             output.error('Patch %s is currently applied\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
-        if patchfns.quilt_command('pop -qf') != cmd_result.OK:
+        if patchfns.pyquilt_command('pop -qf') != cmd_result.OK:
             return cmd_result.ERROR
     if patchfns.remove_from_series(patch):
         output.write('Removed patch %s\n' % patchfns.print_patch(patch))
