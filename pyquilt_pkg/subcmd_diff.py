@@ -283,7 +283,7 @@ def run_diff(args):
     files_were_shadowed = False
     output.start_pager()
     for filename in files:
-        snapshot_path = os.path.join(patchfns.QUILT_PC, snap_subdir. filename) if snap_subdir else None
+        snapshot_path = os.path.join(patchfns.QUILT_PC, snap_subdir, filename) if snap_subdir else None
         if snapshot_path and os.path.exists(snapshot_path):
             old_file = snapshot_path
         elif args.opt_relative:

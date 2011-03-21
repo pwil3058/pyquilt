@@ -37,3 +37,4 @@ from pyquilt_pkg import subcmd_diff
 from pyquilt_pkg import subcmd_revert
 from pyquilt_pkg import subcmd_files
 from pyquilt_pkg import subcmd_edit
+from pyquilt_pkg import subcmd_snapshot
