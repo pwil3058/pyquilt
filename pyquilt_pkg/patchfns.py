@@ -210,6 +210,7 @@ def change_db_strip_level(level, patch):
                 if not match.group(2):
                     if level:
                         lines[index] = '%s %s\n' % (match.group(1), level)
+                    open(SERIES, 'w').writelines(lines)
                     break
                 parts = match.group(2).split('#', 1)
                 patch_args = parts[0].split()

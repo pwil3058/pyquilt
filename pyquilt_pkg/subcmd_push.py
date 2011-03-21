@@ -214,7 +214,7 @@ def run_push(args):
                 trf = ''
             patch_args = '%s --backup --prefix="%s/" %s -E %s' % (pp_args, prefix, trf, more_patch_args)
             result = apply_patch(patch_file, patch_args=patch_args)
-            if result.eflags != 0 or not args.opt_quiet:
+            if not args.opt_quiet:
                 if do_colorize:
                     output.error(colorize(cleanup_patch_output(result.stderr, args)))
                     output.write(colorize(cleanup_patch_output(result.stdout, args)))
