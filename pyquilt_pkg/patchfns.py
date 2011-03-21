@@ -532,7 +532,7 @@ def find_patch_file(name):
 def files_in_patch(patch):
     path = os.path.join(QUILT_PC, patch)
     if os.path.isdir(path):
-        return fsutils.files_in_dir(path)
+        return sorted(fsutils.files_in_dir(path, exclude_timestamp=True))
     return [] 
 
 def file_in_patch(filename, patch):
