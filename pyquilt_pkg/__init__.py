@@ -38,3 +38,5 @@ from pyquilt_pkg import subcmd_revert
 from pyquilt_pkg import subcmd_files
 from pyquilt_pkg import subcmd_edit
 from pyquilt_pkg import subcmd_snapshot
+from pyquilt_pkg import subcmd_top
+from pyquilt_pkg import subcmd_patches

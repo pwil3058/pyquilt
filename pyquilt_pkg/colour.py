@@ -21,6 +21,7 @@ def ansi_colour_seq(num):
     return '\033[%dm' % num
 
 CLEAR = ansi_colour_seq(00)
+_COLOURIZE = False
 
 MAP = {
     'diff_hdr' : ansi_colour_seq(32),
@@ -41,13 +42,17 @@ MAP = {
 }
 
 def set_up():
+    global _COLOURIZE
     config_str = customization.get_config('QUILT_COLORS', '')
     for cmap in config_str.split(':'):
         if '=' in cmap:
             name, num = cmap.split('=')
             MAP[name] = ansi_colour_seq(num)
+    _COLOURIZE = True
 
 def wrap(text, category):
+    if not _COLOURIZE:
+        return text
     cseq = MAP.get(category, None)
     if not cseq:
         return text
