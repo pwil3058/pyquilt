@@ -152,9 +152,9 @@ def create_db():
             sys.exit(cmd_result.ERROR)
         open(os.path.join(QUILT_PC, '.version'), 'w').write('%s\n' % DB_VERSION)
     if not os.path.isfile(os.path.join(QUILT_PC, '.quilt_patches')):
-        open(os.path.join(QUILT_PC, '.quilt_patches'), 'w').write(QUILT_PATCHES)
+        open(os.path.join(QUILT_PC, '.quilt_patches'), 'w').write(QUILT_PATCHES + '\n')
     if not os.path.isfile(os.path.join(QUILT_PC, '.quilt_series')):
-        open(os.path.join(QUILT_PC, '.quilt_series'), 'w').write(QUILT_SERIES)
+        open(os.path.join(QUILT_PC, '.quilt_series'), 'w').write(QUILT_SERIES + '\n')
 
 def quote_bre(string):
     'Quote a string for use in a basic regular expression.'

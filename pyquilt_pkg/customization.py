@@ -56,7 +56,7 @@ def process_configuration_data(filename=None):
             output.error('IO errror reading %s.\n' % filename)
             sys.exit(cmd_result.ERROR)
     # Environment variables take precedence for some
-    for var in ['QUILT_PATCHES', 'QUILT_BACKUP']:
+    for var in ['QUILT_PATCHES', 'QUILT_BACKUP', 'QUILT_SERIES']:
         _QUILT_CONFIG_DICT[var] = os.getenv(var, _QUILT_CONFIG_DICT[var])
 
 def get_default_args(key):
