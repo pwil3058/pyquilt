@@ -381,6 +381,9 @@ def rename_in_series(from_name, to_name):
 def rename_in_db(from_name, to_name):
     return _rename_in_xxxx(from_name, to_name, xxxx=DB)
 
+def backup_dir_name(patch):
+    return os.path.join(QUILT_PC, patch)
+
 def backup_file_name(patch, *args):
     if len(args) == 1:
         return os.path.join(QUILT_PC, patch, args[0])
