@@ -566,7 +566,7 @@ def patch_args(patch):
             if match:
                 p_seen = False
                 args = []
-                for arg in match.group(1).split():
+                for arg in match.group(1).split('#')[0].split():
                     args.append(arg)
                     if arg[:2] == '-p':
                         p_seen = True
