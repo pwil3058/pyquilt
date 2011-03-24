@@ -514,9 +514,8 @@ def remove_trailing_ws(text, strip_level, dry_run=False):
         cmd += ' -n'
     return shell.run_cmd(cmd, input_text=text)
 
-def apply_patch(patch_file, indir=None, patch_args=''):
+def apply_patch_text(text, indir=None, patch_args=''):
     from pyquilt_pkg import customization
-    text = fsutils.get_file_contents(patch_file)
     patch_opts = customization.get_default_opts('patch')
     if indir:
         cmd = 'patch -d %s' % indir
@@ -524,3 +523,7 @@ def apply_patch(patch_file, indir=None, patch_args=''):
         cmd = 'patch'
     cmd += ' %s %s' % (patch_opts, patch_args)
     return shell.run_cmd(cmd, input_text=text)
+
+def apply_patch(patch_file, indir=None, patch_args=''):
+    text = fsutils.get_file_contents(patch_file)
+    return apply_patch_text(text, indir=indir, patch_args=patch_args)

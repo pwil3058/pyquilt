@@ -41,3 +41,4 @@ from pyquilt_pkg import subcmd_snapshot
 from pyquilt_pkg import subcmd_top
 from pyquilt_pkg import subcmd_patches
 from pyquilt_pkg import subcmd_remove
+from pyquilt_pkg import subcmd_fold

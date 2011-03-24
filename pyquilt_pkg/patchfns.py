@@ -559,7 +559,7 @@ def files_in_patch_ordered(patch):
         if filename in files_in_dir:
             files.append(filename)
             files_in_dir.remove(filename)
-    return sorted(files + files_in_dir)
+    return files + sorted(files_in_dir)
 
 def patch_args(patch):
     if os.path.isfile(SERIES):
