@@ -264,7 +264,7 @@ def run_diff(args):
             else:
                 ofiles.add(ofile)
         for patch in patches:
-            for fname in files_in_patch_ordered(patch):
+            for fname in patchfns.files_in_patch_ordered(patch):
                 if fname in ofiles and fname not in files:
                     files.append(fname)
     else:
@@ -305,7 +305,7 @@ def run_diff(args):
             output.error('Diff failed, aborting\n')
             return cmd_result.ERROR
     if files_were_shadowed:
-        output.error('Warning: more recent patches modify files in patch %s\n', patchfns.print_patch(last_patch))
+        output.error('Warning: more recent patches modify files in patch %s\n' % patchfns.print_patch(last_patch))
     output.wait_for_pager()
     return cmd_result.OK
 

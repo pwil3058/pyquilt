@@ -88,22 +88,25 @@ def file_contents_equal(filename, text):
 
 def files_in_dir(dirname, recurse=True, exclude_timestamp=True):
     '''Return a list of the files in the given directory.'''
-    def _files_in_subdir(subdir):
-        files = list()
-        for entry in os.listdir(subdir):
-            entry_path = os.path.join(subdir, entry)
-            if os.path.isdir(entry_path):
-                files += _files_in_subdir(entry_path)
-            else:
-                files.append(entry_path)
-        return files
     files = []
-    for entry in os.listdir(dirname):
-        if os.path.isdir(entry):
-            if recurse:
-                files += _files_in_subdir(entry)
-        elif not exclude_timestamp or not entry == '.timestamp':
-            files.append(entry)
+    if recurse:
+        def onerror(exception):
+            raise exception
+        try:
+            for basedir, dirnames, filenames in os.walk(dirname, onerror=onerror):
+                reldir = '' if basedir == dirname else os.path.relpath(basedir, dirname)
+                for entry in filenames:
+                    if not exclude_timestamp or not entry == '.timestamp':
+                        files.append(os.path.join(reldir, entry))
+        except OSError as edata:
+            output.perror(edata)
+            return []
+    else:
+        for entry in os.listdir(dirname):
+            if os.path.isdir(entry):
+                continue
+            if not exclude_timestamp or not entry == '.timestamp':
+                files.append(entry)
     return files
 
 def touch(path):

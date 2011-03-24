@@ -296,7 +296,7 @@ def run_push(args):
     is_ok = True
     for patch in patches:
         is_ok = add_patch(patch)
-        #output.write('\n')
+        output.write('\n')
         if not is_ok:
             break
     if is_ok:

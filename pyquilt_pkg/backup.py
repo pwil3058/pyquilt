@@ -193,7 +193,7 @@ def backup(bu_dir, filelist, verbose=False):
 def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=False):
     def restore_file(file_nm):
         backup = os.path.join(bu_dir, file_nm)
-        file_nm = file_nm if to_dir is None else  os.path.relpath(os.path.join(to_dir, file_nm))
+        file_nm = file_nm if to_dir is None else os.path.relpath(os.path.join(to_dir, file_nm))
         _create_parents(file_nm)
         try:
             stat_data = os.stat(backup)
@@ -238,8 +238,9 @@ def restore(bu_dir, filelist=None, to_dir='.', verbose=False, keep=False, touch=
             raise exception
         try:
             for basedir, dirnames, filenames in os.walk(bu_dir, onerror=onerror):
+                reldir = '' if basedir == bu_dir else os.path.relpath(basedir, bu_dir)
                 for filename in filenames:
-                    if not restore_file(filename):
+                    if not restore_file(os.path.join(reldir, filename)):
                         return False
         except OSError as edata:
             output.perror(edata)
@@ -295,7 +296,7 @@ def remove(bu_dir, filelist=False, verbose=False):
         try:
             for basedir, dirnames, filenames in os.walk(bu_dir):
                 for filename in filenames:
-                    if not remove_file(filename):
+                    if not remove_file(os.path.join(basedir, filename)):
                         return False
         except IOError as edata:
             output.perror(edata)
