@@ -23,6 +23,7 @@ from pyquilt_pkg import customization
 from pyquilt_pkg import output
 from pyquilt_pkg import putils
 from pyquilt_pkg import shell
+from pyquilt_pkg import fsutils
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'import',
@@ -104,7 +105,7 @@ def merge_patches(old, new, opt_desc):
     if opt_desc == 'o':
         patchtext += putils.get_patch_diff(new)
     else:
-        patchtext += open(new).read()
+        patchtext += fsutils.get_file_contents(new)
     os.remove(old_desc)
     os.remove(new_desc)
     return patchtext
@@ -150,11 +151,11 @@ def run_import(args):
                 os.makedirs(dest_dir)
         try:
             if merged:
-                open(dest, 'w').write(merged_patch)
+                fsutils.set_file_contents(dest, merged_patch)
             else:
                 # just in case dest == patch_file do it this way
-                text = open(patch_file).read()
-                open(dest, 'w').write(text)
+                text = fsutils.get_file_contents(patch_file)
+                fsutils.set_file_contents(dest, text)
         except IOError as edata:
             output.error('Failed to import patch %s\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
