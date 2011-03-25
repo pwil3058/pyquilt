@@ -296,10 +296,10 @@ def run_push(args):
     is_ok = True
     for patch in patches:
         is_ok = add_patch(patch)
-        if not args.opt_quiet:
-            output.write('\n')
         if not is_ok:
             break
+        if not args.opt_quiet:
+            output.write('\n')
     if is_ok:
         output.write('Now at patch %s\n' % patchfns.print_top_patch())
     return cmd_result.OK if is_ok else cmd_result.ERROR
