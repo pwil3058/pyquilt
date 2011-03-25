@@ -222,7 +222,7 @@ def clean_up(workdir):
 
 def run_diff(args):
     patchfns.chdir_to_base_dir()
-    snap_subdir = '.snap' if args.opt_snapshot else None
+    snap_subdir = os.path.join(patchfns.QUILT_PC, '.snap') if args.opt_snapshot else None
     if args.opt_combine:
         first_patch = '-' if args.opt_combine == '-' else patchfns.find_applied_patch(args.opt_combine)
     else:
@@ -241,7 +241,8 @@ def run_diff(args):
     files = []
     if args.opt_snapshot and len(args.opt_files) == 0:
         for path, _dirs, bases in os.walk(snap_subdir):
-            files += [os.path.join(path, base) for base in bases]
+            rpath = '' if path == snap_subdir else os.path.relpath(path, snap_subdir)
+            files += [os.path.join(rpath, base) for base in bases]
         files.sort()
         args.opt_combine = True
         first_patch = patchfns.applied_patches()[0]
@@ -283,7 +284,7 @@ def run_diff(args):
     files_were_shadowed = False
     output.start_pager()
     for filename in files:
-        snapshot_path = os.path.join(patchfns.QUILT_PC, snap_subdir, filename) if snap_subdir else None
+        snapshot_path = os.path.join(snap_subdir, filename) if snap_subdir else None
         if snapshot_path and os.path.exists(snapshot_path):
             old_file = snapshot_path
         elif args.opt_relative:
