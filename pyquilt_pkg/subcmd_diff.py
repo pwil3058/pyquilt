@@ -224,7 +224,7 @@ def run_diff(args):
     patchfns.chdir_to_base_dir()
     snap_subdir = '.snap' if args.opt_snapshot else None
     if args.opt_combine:
-        first_patch = '' if args.opt_combine == '-' else patchfns.find_applied_patch(args.opt_combine)
+        first_patch = '-' if args.opt_combine == '-' else patchfns.find_applied_patch(args.opt_combine)
     else:
         first_patch = None
     if len([opt for opt in [args.opt_combine, args.opt_snapshot, args.opt_relative] if opt]) > 1:
