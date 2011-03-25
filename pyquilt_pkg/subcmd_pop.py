@@ -199,6 +199,8 @@ def run_pop(args):
             number = int(args.patchnamornum)
         else:
             stop_at_patch = patchfns.find_unapplied_patch(args.patchnamornum)
+            if not stop_at_patch:
+                return cmd_result.ERROR
     elif not args.opt_all:
         number = 1
     silent = args.opt_quiet
