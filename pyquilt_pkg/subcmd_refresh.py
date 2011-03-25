@@ -242,7 +242,7 @@ def run_refresh(args):
     else:
         result = putils.remove_trailing_ws(patch_content, num_strip_level, dry_run=True)
         if result.stderr:
-            output.error('\n'.join(result[1:]))
+            output.error(result.stderr)
     patch_file = patchfns.patch_file_name(patch)
     prev_patch_file = patch_file if os.path.isfile(patch_file) else '/dev/null'
     result_content = patchfns.patch_header(prev_patch_file)
