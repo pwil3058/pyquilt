@@ -225,6 +225,8 @@ def run_diff(args):
     snap_subdir = os.path.join(patchfns.QUILT_PC, '.snap') if args.opt_snapshot else None
     if args.opt_combine:
         first_patch = '-' if args.opt_combine == '-' else patchfns.find_applied_patch(args.opt_combine)
+        if not first_patch:
+            return cmd_result.ERROR
     else:
         first_patch = None
     if len([opt for opt in [args.opt_combine, args.opt_snapshot, args.opt_relative] if opt]) > 1:
@@ -247,6 +249,7 @@ def run_diff(args):
         args.opt_combine = True
         first_patch = patchfns.applied_patches()[0]
     if args.opt_combine:
+        print 'first:', first_patch
         patches = patchfns.patches_before(last_patch) + [last_patch]
         if first_patch != '-':
             try:
