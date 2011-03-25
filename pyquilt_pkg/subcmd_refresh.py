@@ -172,7 +172,7 @@ def run_refresh(args):
     patch = patchfns.find_applied_patch(args.patchname)
     if not patch:
         return cmd_result.ERROR
-    if args.opt_sort:
+    if not args.opt_sort:
         files = patchfns.files_in_patch_ordered(patch)
     else:
         files = patchfns.files_in_patch(patch)
