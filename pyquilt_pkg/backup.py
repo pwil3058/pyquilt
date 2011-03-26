@@ -127,7 +127,7 @@ def ensure_nolinks(filename):
         try:
             from_fd = os.open(filename, os.O_RDONLY)
             # Temp file name is "path/to/.file.XXXXXX"
-            to_fd, tmpname = os.mkstemp(prefix=filename)
+            to_fd, tmpname = tempfile.mkstemp(prefix=os.path.abspath(filename))
             _copy_fd(from_fd, to_fd)
             os.fchmod(to_fd, stat_data.st_mode)
             os.rename(tmpname, filename)
@@ -137,9 +137,9 @@ def ensure_nolinks(filename):
             return False
         finally:
             if from_fd is not None:
-                close(from_fd);
+                os.close(from_fd);
             if to_fd is not None:
-                close(to_fd);
+                os.close(to_fd);
     else:
         return True
 
