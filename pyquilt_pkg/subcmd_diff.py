@@ -249,7 +249,6 @@ def run_diff(args):
         args.opt_combine = True
         first_patch = patchfns.applied_patches()[0]
     if args.opt_combine:
-        print 'first:', first_patch
         patches = patchfns.patches_before(last_patch) + [last_patch]
         if first_patch != '-':
             try:
