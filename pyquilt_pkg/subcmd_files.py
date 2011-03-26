@@ -13,6 +13,8 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+import os
+
 from pyquilt_pkg import cmd_line
 from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchfns
@@ -98,13 +100,13 @@ def run_files(args):
                 output.write('%s\n' % filename)
             else:
                 status = ' '
-                buname = patchfns.backup_file_name(filename)
+                buname = patchfns.backup_file_name(patch, filename)
                 if os.path.exists(buname) and os.path.getsize(buname) > 0:
                     if not os.path.exists(filename) or os.path.getsize(filename) == 0:
                         status = '-'
                 elif os.path.exists(filename) or os.path.getsize(filename) > 0:
                     status = '+'
-                output.write('%s %s\n' % (status, file))
+                output.write('%s %s\n' % (status, filename))
     output.wait_for_pager()
     return cmd_result.OK
 
