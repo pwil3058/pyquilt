@@ -327,6 +327,8 @@ def applied_before(patch):
     patches = applied_patches()
     if not patches:
         return []
+    if not patch in patches:
+        return patches
     return patches[:patches.index(patch)]
 
 def find_patch_in_series(name=None):
