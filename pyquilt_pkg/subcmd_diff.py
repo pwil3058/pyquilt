@@ -263,9 +263,10 @@ def run_diff(args):
         ofiles = set()
         for ofile in args.opt_files:
             if ofile.startswith('.' + os.sep):
-                ofiles.add(ofile[2:])
-            else:
-                ofiles.add(ofile)
+                ofile = ofile[2:]
+            if patchfns.SUBDIR:
+                ofile = os.path.join(patchfns.SUBDIR, ofile)
+            ofiles.add(ofile)
         for patch in patches:
             for fname in patchfns.files_in_patch_ordered(patch):
                 if fname in ofiles and fname not in files:
