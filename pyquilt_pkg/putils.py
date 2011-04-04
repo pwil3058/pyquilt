@@ -268,6 +268,14 @@ def get_patch_descr(path):
     else:
         return ''.join(lines)
 
+def extract_header(text):
+    lines = text.splitlines(True)
+    diffstat_si, patch = _trisect_patch_lines(lines)
+    if patch is None:
+        return text
+    else:
+        return ''.join(lines[0:patch[0]])
+
 def get_patch_hdr_lines(path):
     try:
         buf = fsutils.get_file_contents(path)

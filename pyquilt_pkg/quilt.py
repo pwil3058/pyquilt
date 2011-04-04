@@ -44,6 +44,7 @@ def is_available():
 _QUILT_REMOVE_TRAILING_WS = None
 
 if is_available():
+    global _QUILT_REMOVE_TRAILING_WS
     _cand = os.path.join(_QUILT_DIR, 'scripts', 'remove-trailing-ws')
     if os.path.isfile(_cand):
         _QUILT_REMOVE_TRAILING_WS = _cand
