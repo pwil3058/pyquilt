@@ -479,12 +479,6 @@ def _get_unified_diff_files(lines, i, strip_req_level=strip_one_level):
                     files.append((strip_req_level(file2), EXTANT, None))
     return files
 
-_CDIFF_H1 = re.compile("^\*\*\* (\S+)\s*(.*)$")
-_CDIFF_H2 = re.compile("^--- (\S+)\s*(.*)$")
-_CDIFF_H3 = re.compile("^\*+$")
-_CDIFF_CHG = re.compile("^\*+\s+(\d+)(,(\d+))?\s+\*+\s*(.*)$")
-_CDIFF_DEL = re.compile("^-+\s+(\d+)(,(\d+))?\s+-+\s*(.*)$")
-
 def _get_combined_diff_files(lines, i, strip_req_level=strip_one_level):
     files = []
     while i < len(lines):
