@@ -44,7 +44,7 @@ def run_edit(args):
     result = shell.run_cmd('%s %s' % (os.getenv('EDITOR'), ' '.join(efilelist)))
     output.error(result.stderr)
     output.write(result.stdout)
-    status = cmd_result.OK
+    status = cmd_result.OK if result.eflags == 0 else cmd_result.ERROR
     for filename in args.filelist:
         efname = filename if not patchfns.SUBDIR else os.path.join(patchfns.SUBDIR, filename)
         if not os.path.exists(efname):

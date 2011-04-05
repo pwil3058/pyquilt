@@ -117,8 +117,20 @@ def run_header(args):
         set_text(patch_file, get_text(patch_file) + read_input())
         output.write('Appended text to header of patch %s\n' % patchfns.print_patch(patch))
     elif args.opt_edit:
-        # TODO
-        pass
+        savelang = os.getenv('LANG', None)
+        os.environ['LANG'] = patchfns.ORIGINAL_LANG
+        tempfile = patchfns.gen_tempfile()
+        result = shell.run_cmd('%s %s' % (os.getenv('EDITOR'), tempfile))
+        if savelang:
+            os.environ['LANG'] = savelang
+        output.error(result.stderr)
+        output.write(result.stdout)
+        text = open(tempfile).read()
+        os.remove(tempfile)
+        if result.eflags != 0:
+            return cmd_result.ERROR
+        set_text(patch_file, text)
+        output.write('Replaced header of patch %s\n' % patchfns.print_patch(patch))
     else:
         if not os.path.exists(patch_file):
             return cmd_result.OK
