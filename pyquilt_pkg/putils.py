@@ -479,10 +479,39 @@ def _get_unified_diff_files(lines, i, strip_req_level=strip_one_level):
                     files.append((strip_req_level(file2), EXTANT, None))
     return files
 
+_CDIFF_H1 = re.compile("^\*\*\* (\S+)\s*(.*)$")
+_CDIFF_H2 = re.compile("^--- (\S+)\s*(.*)$")
+_CDIFF_H3 = re.compile("^\*+$")
+_CDIFF_CHG = re.compile("^\*+\s+(\d+)(,(\d+))?\s+\*+\s*(.*)$")
+_CDIFF_DEL = re.compile("^-+\s+(\d+)(,(\d+))?\s+-+\s*(.*)$")
+
 def _get_combined_diff_files(lines, i, strip_req_level=strip_one_level):
     files = []
     while i < len(lines):
-        pass
+        match1 = _CDIFF_H1.match(lines[i])
+        i += 1
+        if not match1:
+            continue
+        match2 = _CDIFF_H2.match(lines[i])
+        if not match2:
+            continue
+        match3 = _CDIFF_H3.match(lines[i + 1])
+        if not match3:
+            continue
+        if not (_CDIFF_CHG.match(lines[i + 2]) or  _CDIFF_DEL.match(lines[i + 2])):
+            continue
+        if i >= 3:
+            matchIndex = _HDR_INDEX.match(lines[i-3])
+            sepIndex = _HDR_SEP.match(lines[i-2])
+            if matchIndex and sepIndex:
+                files.append(matchIndex.group(1))
+                i += 2
+                continue
+        if match2.group(1) != '/dev/null':
+            files.append(strip_req_level(match2.group(1)))
+        else:
+            files.append(strip_req_level(match1.group(1)))
+        i += 2
     return files
 
 def get_patch_files(path, status=True, decorated=False, strip_level=1):
