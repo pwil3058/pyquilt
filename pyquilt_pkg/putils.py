@@ -32,6 +32,7 @@ _DIFFSTAT_FSTATS = re.compile("^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)?))
 _TIMESTAMP_RE_STR = '(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{9} [-+]{1}\d{4})'
 _ALT_TIMESTAMP_RE_STR = '([A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4})'
 _EITHER_TS_RE = '(%s|%s)' % (_TIMESTAMP_RE_STR, _ALT_TIMESTAMP_RE_STR)
+
 _UDIFF_H1 = re.compile('^--- (.*?)(\s+%s)?$' % _EITHER_TS_RE)
 _UDIFF_H2 = re.compile('^\+\+\+ (.*?)(\s+%s)?$' % _EITHER_TS_RE)
 _UDIFF_PD = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
@@ -245,6 +246,14 @@ def _trisect_patch_file(path):
             res = (lines[0:diffstat_si], lines[diffstat_si:patch[0]], plines)
     return (True,  res)
 
+def _count_comment_lines(lines):
+    count = 0
+    for line in lines:
+        if not line.startswith('#'):
+            break
+        count += 1
+    return count
+
 def get_patch_descr_lines(path):
     try:
         buf = fsutils.get_file_contents(path)
@@ -259,7 +268,10 @@ def get_patch_descr_lines(path):
             res = lines[0:patch[0]]
     else:
         res = lines[0:diffstat_si]
-    return (True,  res)
+    if len(res):
+        comment_count = _count_comment_lines(res)
+        res = res[comment_count:]
+    return (True, res)
 
 def get_patch_descr(path):
     ok, lines = get_patch_descr_lines(path)
@@ -340,7 +352,11 @@ def set_patch_descr_lines(path, lines):
             return False
     else:
         parts = ([], [], [])
-    comments = [line for line in parts[0] if line.startswith('#')]
+    if len(parts[0]):
+        comment_count = _count_comment_lines(parts[0])
+        comments = [0][comment_count:]
+    else:
+        comments = []
     tmpf_name = _lines_to_temp_file(comments + lines + parts[1] + parts[2], path)
     if not tmpf_name:
         return False
