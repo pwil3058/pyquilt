@@ -377,7 +377,7 @@ def set_patch_hdr_lines(path, lines):
     return ret
 
 def set_patch_hdr(path, text):
-    return set_patch_descr_lines(path, text.splitlines(True))
+    return set_patch_hdr_lines(path, text.splitlines(True))
 
 ADDED = "A"
 EXTANT = "M"

@@ -57,7 +57,7 @@ def set_file_contents(filename, text):
         try:
             gzip.open(filename, 'wb').write(text)
             return True
-        except IOError, zlib.error:
+        except (IOError, zlib.error):
             return False
     elif ext == '.bz2':
         try:
