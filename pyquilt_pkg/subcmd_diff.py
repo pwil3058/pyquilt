@@ -173,13 +173,13 @@ def colorize(text):
     for line in text.splitlines(True):
         if line.startswith(('Index: ', '--- ', '+++ ', '*** ')):
             ctext += colour.wrap(line, 'diff_hdr')
-        elif line.startwith('+'):
+        elif line.startswith('+'):
             ctext += colour.wrap(line, 'diff_add')
-        elif line.startwith('-'):
+        elif line.startswith('-'):
             ctext += colour.wrap(line, 'diff_rem')
-        elif line.startwith('!'):
+        elif line.startswith('!'):
             ctext += colour.wrap(line, 'diff_mod')
-        elif line.startwith('*' * 15):
+        elif line.startswith('*' * 15):
             ctext += colour.wrap(line, 'diff_cctx')
         else:
             match = hunk_cre.match(line)
@@ -285,6 +285,8 @@ def run_diff(args):
             return cmd_result.ERROR
     is_ok = True
     files_were_shadowed = False
+    if args.opt_color:
+        colour.set_up()
     output.start_pager()
     for filename in files:
         snapshot_path = os.path.join(snap_subdir, filename) if snap_subdir else None
