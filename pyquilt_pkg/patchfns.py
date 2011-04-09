@@ -27,7 +27,6 @@ from pyquilt_pkg import cmd_result
 from pyquilt_pkg import shell
 from pyquilt_pkg import putils
 from pyquilt_pkg import fsutils
-from pyquilt_pkg import quilt
 from pyquilt_pkg import backup
 from pyquilt_pkg import output
 

@@ -21,9 +21,11 @@ import re
 import os.path
 import shutil
 import tempfile
+import collections
 
 from pyquilt_pkg import shell
 from pyquilt_pkg import fsutils
+from pyquilt_pkg import cmd_result
 
 _DIFFSTAT_EMPTY = re.compile("^#? 0 files changed$")
 _DIFFSTAT_END = re.compile("^#? (\d+) files? changed(, (\d+) insertions?\(\+\))?(, (\d+) deletions?\(-\))?(, (\d+) modifications?\(\!\))?$")
@@ -299,6 +301,9 @@ def get_patch_hdr_lines(path):
         res = lines
     else:
         res = lines[0:patch[0]]
+    if len(res):
+        comment_count = _count_comment_lines(res)
+        res = res[comment_count:]
     return (True,  res)
 
 def get_patch_hdr(path):
@@ -338,6 +343,7 @@ def _lines_to_temp_file(lines, dummyfor=None):
         suffix = ''
     try:
         fd, tmpf_name = tempfile.mkstemp(dir=tmpdir,suffix=suffix)
+        os.close(fd)
         fsutils.set_file_contents(tmpf_name, ''.join(lines))
     except IOError:
         if tmpf_name is not None and os.path.exists(tmpf_name):
@@ -354,7 +360,7 @@ def set_patch_descr_lines(path, lines):
         parts = ([], [], [])
     if len(parts[0]):
         comment_count = _count_comment_lines(parts[0])
-        comments = [0][comment_count:]
+        comments = parts[0][:comment_count]
     else:
         comments = []
     tmpf_name = _lines_to_temp_file(comments + lines + parts[1] + parts[2], path)
@@ -379,7 +385,11 @@ def set_patch_hdr_lines(path, lines):
             return False
     else:
         parts = ([], [], [])
-    comments = [line for line in parts[0] if line.startswith('#')]
+    if len(parts[0]):
+        comment_count = _count_comment_lines(parts[0])
+        comments = parts[0][:comment_count]
+    else:
+        comments = []
     tmpf_name = _lines_to_temp_file(comments + lines + parts[2], path)
     if not tmpf_name:
         return False
@@ -551,16 +561,6 @@ def get_patch_files(path, status=True, decorated=False, strip_level=1):
         return (True, files)
     return (True, [file_data[0] for file_data in files])
 
-def remove_trailing_ws(text, strip_level, dry_run=False):
-    import quilt
-    script = quilt.get_remove_trailing_ws_path()
-    if not script:
-        return (cmd_result.ERROR, '', 'Couldn\'t find quilt scripts\n')
-    cmd = script + ' -p%s' % strip_level
-    if dry_run:
-        cmd += ' -n'
-    return shell.run_cmd(cmd, input_text=text)
-
 def apply_patch_text(text, indir=None, patch_args=''):
     from pyquilt_pkg import customization
     patch_opts = customization.get_default_opts('patch')
@@ -574,3 +574,202 @@ def apply_patch_text(text, indir=None, patch_args=''):
 def apply_patch(patch_file, indir=None, patch_args=''):
     text = fsutils.get_file_contents(patch_file)
     return apply_patch_text(text, indir=indir, patch_args=patch_args)
+
+####### Trailing Whitespace stuff below here ########
+
+def _trim_trailing_ws(line):
+    return re.sub('[ \t]+$', '', line)
+
+def _get_index_file_at(lines, i, strip_level):
+    imatch = _HDR_INDEX.match(lines[i])
+    if imatch:
+        ifile = strip_level(imatch.group(1))
+        if _HDR_SEP.match(lines[i + 1]):
+            return (ifile, i + 2)
+        else:
+            return (ifile, i + 2)
+    return (None, i)
+
+def _get_udiff_files_at(lines, i, strip_level):
+    if (i + 2) >= len(lines):
+        return (None, i)
+    match1 = _UDIFF_H1.match(lines[i])
+    match2 = _UDIFF_H2.match(lines[i + 1])
+    if not (match1 and match2):
+        return (None, i)
+    file1 = None if match1.group(1) == '/dev/null' else strip_level(match1.group(1))
+    file2 = None if match2.group(1) == '/dev/null' else strip_level(match2.group(1))
+    return ((file1, file2), i + 2)
+
+_HUNK_DATA = collections.namedtuple('_HUNK_DATA', ['old_start', 'old_len', 'new_start', 'new_len'])
+
+def _get_udiff_hunk_data_at(lines, i):
+    match = _UDIFF_PD.match(lines[i])
+    if not match:
+        return (None, i)
+    old_start = int(match.group(1))
+    old_len = int(match.group(3)) if match.group(3) is not None else 1
+    new_start = int(match.group(4))
+    new_len = int(match.group(6)) if match.group(6) is not None else 1
+    return (_HUNK_DATA(old_start, old_len, new_start, new_len), i + 1)
+
+def _udiff_remove_trailing_ws(lines, index, strip_level):
+    file_list = []
+    ws_data = {}
+    while index < len(lines):
+        ifile, index = _get_index_file_at(lines, index, strip_level)
+        pfiles, index = _get_udiff_files_at(lines, index, strip_level)
+        if pfiles is None:
+            index += 1
+            continue
+        fname = pfiles[1] if pfiles[1] else (pfiles[0] if pfiles[0] else ifile)
+        if fname is None:
+            return False
+        file_list.append(fname)
+        ws_data[fname] = list()
+        hunk_data, index = _get_udiff_hunk_data_at(lines, index)
+        if hunk_data is None:
+            return False
+        while hunk_data is not None:
+            old_count = new_count = 0
+            while old_count < hunk_data.old_len or new_count < hunk_data.new_len:
+                if lines[index].startswith('-'):
+                    old_count += 1
+                elif lines[index].startswith(' '):
+                    old_count += 1
+                    new_count += 1
+                else:
+                    repl_line = _trim_trailing_ws(lines[index])
+                    if len(repl_line) != len(lines[index]):
+                        ws_data[fname].append(str(hunk_data.new_start + new_count))
+                        lines[index] = repl_line
+                    new_count += 1
+                index += 1
+            if not index < len(lines):
+                break
+            hunk_data, index = _get_udiff_hunk_data_at(lines, index)
+    report = []
+    for filename in file_list:
+        bad_lines = ws_data[filename]
+        if len(bad_lines) > 0:
+            report.append((filename, bad_lines))
+    return report
+
+def _get_cdiff_files_at(lines, i, strip_level):
+    if (i + 2) >= len(lines):
+        return (None, i)
+    match1 = _CDIFF_H1.match(lines[i])
+    match2 = _CDIFF_H2.match(lines[i + 1])
+    if not (match1 and match2):
+        return (None, i)
+    file1 = None if match1.group(1) == '/dev/null' else strip_level(match1.group(1))
+    file2 = None if match2.group(1) == '/dev/null' else strip_level(match2.group(1))
+    return ((file1, file2), i + 2)
+
+_CHUNK_DATA = collections.namedtuple('_CHUNK_DATA', ['start', 'length'])
+
+def _get_cdiff_oldhunk_data_at(lines, i):
+    if _CDIFF_H3.match(lines[i]):
+        i += 1
+    else:
+        return (None, i)
+    match = _CDIFF_CHG.match(lines[i])
+    if not match:
+        return (None, i)
+    start = int(match.group(1))
+    finish = int(match.group(3)) if match.group(3) is not None else start
+    if start == 0 and finish == 0:
+        length = 0
+    else:
+        length = finish - start + 1
+    return (_CHUNK_DATA(start, length), i + 1)
+
+def _get_cdiff_newhunk_data_at(lines, i):
+    match = _CDIFF_DEL.match(lines[i])
+    if not match:
+        return (None, i)
+    start = int(match.group(1))
+    finish = int(match.group(3)) if match.group(3) is not None else start
+    if start == 0 and finish == 0:
+        length = 0
+    else:
+        length = finish - start + 1
+    return (_CHUNK_DATA(start, length), i + 1)
+
+def _cdiff_remove_trailing_ws(lines, index, strip_level):
+    file_list = []
+    ws_data = {}
+    while index < len(lines):
+        ifile, index = _get_index_file_at(lines, index, strip_level)
+        pfiles, index = _get_cdiff_files_at(lines, index, strip_level)
+        if pfiles is None:
+            index += 1
+            continue
+        fname = pfiles[1] if pfiles[1] else (pfiles[0] if pfiles[0] else ifile)
+        if fname is None:
+            return False
+        file_list.append(fname)
+        ws_data[fname] = list()
+        old_hunk_data, index = _get_cdiff_oldhunk_data_at(lines, index)
+        if old_hunk_data is None:
+            return False
+        while old_hunk_data is not None:
+            new_hunk_data = None
+            old_count = new_count = 0
+            while old_count < old_hunk_data.length:
+                new_hunk_data, index = _get_cdiff_newhunk_data_at(lines, index)
+                if new_hunk_data is not None:
+                    break
+                old_count += 1
+                index += 1
+            if new_hunk_data is None:
+                new_hunk_data, index = _get_cdiff_newhunk_data_at(lines, index)
+                if new_hunk_data is None:
+                    return False
+            while new_count < new_hunk_data.length:
+                if lines[index].startswith('!') or lines[index].startswith('+'):
+                    repl_line = _trim_trailing_ws(lines[index])
+                    if len(repl_line) != len(lines[index]):
+                        ws_data[fname].append(str(new_hunk_data.start + new_count))
+                        lines[index] = repl_line
+                new_count += 1
+                index += 1
+            if not index < len(lines):
+                break
+            old_hunk_data, index = _get_cdiff_oldhunk_data_at(lines, index)
+    report = []
+    for filename in file_list:
+        bad_lines = ws_data[filename]
+        if len(bad_lines) > 0:
+            report.append((filename, bad_lines))
+    return report
+
+def remove_trailing_ws(text, strip_level, dry_run=False):
+    lines = text.splitlines(True)
+    _dont_care, diff_data = _trisect_patch_lines(lines)
+    if not diff_data:
+        return cmd_result.Result(cmd_result.OK, text, '')
+    strip_level = strip_zero_levels if int(strip_level) == 0 else strip_one_level
+    if diff_data[1] == 'u':
+        report = _udiff_remove_trailing_ws(lines, diff_data[0], strip_level)
+    elif diff_data[1] == 'c':
+        report = _cdiff_remove_trailing_ws(lines, diff_data[0], strip_level)
+    else:
+        return cmd_result.Result(cmd_result.ERROR, text, '%s diff format not supported\n' % diff_data[1])
+    if report is False:
+        cmd_result.Result(cmd_result.ERROR, text, 'Patch data does not conform to expectations\n')
+    errtext = ''
+    if dry_run:
+        for filename, bad_lines in report:
+            if len(bad_lines) > 1:
+                errtext += 'Warning: trailing whitespace in lines %s of %s\n' % (','.join(bad_lines), filename)
+            else:
+                errtext += 'Warning: trailing whitespace in line %s of %s\n' % (bad_lines[0], filename)
+        return cmd_result.Result(cmd_result.OK, text, errtext)
+    else:
+        for filename, bad_lines in report:
+            if len(bad_lines) > 1:
+                errtext += 'Removing trailing whitespace from lines %s of %s\n' % (','.join(bad_lines), filename)
+            else:
+                errtext += 'Removing trailing whitespace from line %s of %s\n' % (bad_lines[0], filename)
+        return cmd_result.Result(cmd_result.OK, ''.join(lines), errtext)
