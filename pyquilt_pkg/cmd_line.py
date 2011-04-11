@@ -42,9 +42,27 @@ SUB_CMD_PARSER = PARSER.add_subparsers(title='commands', dest='sub_cmd_name')
 
 def parse_args():
     """Parse the command line, merge with (custom) defaults and return the result"""
-    args = PARSER.parse_args()
+    # Handle the awkward case of the "grep" sub comand
+    # which eludes argparse's capabilities
+    index = 1
+    grep_index = None
+    while index < len(sys.argv) and sys.argv[index] in ['--version', '--quiltrc', '--help', '-h', 'grep']:
+        if sys.argv[index] == 'grep':
+            if grep_index is None:
+                grep_index = index
+            else:
+                break
+        if sys.argv[index] == '--quiltrc':
+            index += 2
+        else:
+            index += 1
+    if grep_index:
+        args = PARSER.parse_args(sys.argv[1:index])
+        args.remainder_of_args = sys.argv[index:]
+    else:
+        args = PARSER.parse_args()
     customization.process_configuration_data(args.quiltrc if args.quiltrc else os.getenv('QUILTRC', None))
-    default_args = customization.get_default_args(args.sub_cmd_name).split()
+    default_args = None if args.sub_cmd_name == 'grep' else customization.get_default_args(args.sub_cmd_name).split()
     if default_args:
         # Command line has precedence so put them last
         args = PARSER.parse_args([args.sub_cmd_name] + default_args + sys.argv[sys.argv.index(args.sub_cmd_name) + 1:])

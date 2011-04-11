@@ -37,6 +37,8 @@ def run_cmd(cmd, input_text=None, use_shell=True):
     if is_posix:
         savedsh = signal.getsignal(signal.SIGPIPE)
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    if not isinstance(cmd, str):
+        use_shell = False
     sub = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
           stderr=subprocess.PIPE, shell=use_shell, close_fds=is_posix, bufsize=-1)
     outd, errd = sub.communicate(input_text)

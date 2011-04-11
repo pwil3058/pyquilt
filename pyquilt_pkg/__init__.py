@@ -46,3 +46,4 @@ from pyquilt_pkg import subcmd_next
 from pyquilt_pkg import subcmd_previous
 from pyquilt_pkg import subcmd_unapplied
 from pyquilt_pkg import subcmd_mail
+from pyquilt_pkg import subcmd_grep
