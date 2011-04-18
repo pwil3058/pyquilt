@@ -20,7 +20,8 @@ import re
 import os
 
 # Useful named tuples to make code clearer
-_HUNK = collections.namedtuple('_HUNK', ['offset', 'start', 'length',])
+_CHUNK = collections.namedtuple('_CHUNK', ['start', 'length'])
+_HUNK = collections.namedtuple('_HUNK', ['offset', 'start', 'length', 'numlines'])
 _PAIR = collections.namedtuple('_PAIR', ['before', 'after',])
 _FILE_AND_TS = collections.namedtuple('_FILE_AND_TS', ['path', 'timestamp',])
 _FILE_AND_TWS_LINES = collections.namedtuple('_FILE_AND_TWS_LINES', ['path', 'tws_lines',])
@@ -32,6 +33,7 @@ class ParseError(Exception):
         self.message = message
         self.lineno = lineno
 
+DEBUG = False
 class Bug(Exception): pass
 
 def gen_strip_level_function(level):
@@ -364,13 +366,13 @@ def _get_udiff_hunk_at(lines, index, udiff_start_index):
     match = UDIFF_HUNK_DATA_CRE.match(lines[index])
     if not match:
         return (None, index)
-    offset = index - udiff_start_index
-    before_hunk = _HUNK(offset, int(match.group(1)), int(match.group(3)) if match.group(3) is not None else 1)
-    after_hunk = _HUNK(offset, int(match.group(4)), int(match.group(6)) if match.group(6) is not None else 1)
+    start_index = index
+    before_length = int(match.group(3)) if match.group(3) is not None else 1
+    after_length = int(match.group(6)) if match.group(6) is not None else 1
     index += 1
     before_count = after_count = 0
     try:
-        while before_count < before_hunk.length or after_count < after_hunk.length:
+        while before_count < before_length or after_count < after_length:
             if lines[index].startswith('-'):
                 before_count += 1
             elif lines[index].startswith('+'):
@@ -383,6 +385,10 @@ def _get_udiff_hunk_at(lines, index, udiff_start_index):
             index += 1
     except IndexError:
         raise ParseError('Unexpected end of patch text.')
+    offset = start_index - udiff_start_index
+    numlines = index - start_index
+    before_hunk = _HUNK(offset, int(match.group(1)), before_length, numlines)
+    after_hunk = _HUNK(offset, int(match.group(4)), after_length, numlines)
     return (_PAIR(before_hunk, after_hunk), index)
 
 class _UDiffData(_DiffData):
@@ -390,42 +396,25 @@ class _UDiffData(_DiffData):
         _DiffData.__init__(self, 'u', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
         bad_lines = list()
-        before_count = after_count = 0
-        index = hunk.before.offset + 1
-        while before_count < hunk.before.length or after_count < hunk.after.length:
-            if self.lines[index].startswith('-'):
-                before_count += 1
-            elif self.lines[index].startswith(' '):
-                before_count += 1
-                after_count += 1
-            elif self.lines[index].startswith('+'):
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
+            if self.lines[index].startswith('+'):
                 repl_line = _trim_trailing_ws(self.lines[index])
                 if len(repl_line) != len(self.lines[index]):
                     bad_lines.append(str(hunk.after.start + after_count))
                     if fix:
                         self.lines[index] = repl_line
-                after_count += 1
-            else:
+            elif DEBUG and not (self.lines[index].startswith('-') or self.lines[index].startswith(' ')):
                 raise Bug('Unexpected end of unified diff hunk.')
-            index += 1
         return bad_lines
     def _get_hunk_diffstat_stats(self, hunk):
         stats = _DiffStats()
-        before_count = after_count = 0
-        index = hunk.before.offset + 1
-        while before_count < hunk.before.length or after_count < hunk.after.length:
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
             if self.lines[index].startswith('-'):
-                before_count += 1
                 stats.incr('deleted')
-            elif self.lines[index].startswith(' '):
-                before_count += 1
-                after_count += 1
             elif self.lines[index].startswith('+'):
-                after_count += 1
                 stats.incr('inserted')
-            else:
+            elif DEBUG and not self.lines[index].startswith(' '):
                 raise Bug('Unexpected end of unified diff hunk.')
-            index += 1
         return stats
 
 def _get_file_udiff_at(lines, start_index, strip_level, raise_if_malformed=False):
@@ -476,49 +465,50 @@ def _get_cdiff_after_file_data_at(lines, index, strip_level):
     filename = match.group(2) if match.group(2) else match.group(3)
     return (_FILE_AND_TS(strip_level(filename), match.group(4)), index + 1)
 
-def _cdiff_hunk(offset, match):
+def _cdiff_chunk(match):
     start = int(match.group(1))
     finish = int(match.group(3)) if match.group(3) is not None else start
     if start == 0 and finish == 0:
         length = 0
     else:
         length = finish - start + 1
-    return _HUNK(offset, start, length)
+    return _CHUNK(start, length)
 
-def _get_cdiff_before_hunk_at(lines, index, cdiff_start_index):
+def _get_cdiff_before_chunk_at(lines, index):
     match = CDIFF_HUNK_BEFORE_CRE.match(lines[index])
     if not match:
         return (None, index)
-    offset = index - cdiff_start_index
-    return (_cdiff_hunk(offset, match), index + 1)
+    return (_cdiff_chunk(match), index + 1)
 
-def _get_cdiff_after_hunk_at(lines, index, cdiff_start_index):
+def _get_cdiff_after_chunk_at(lines, index):
     match = CDIFF_HUNK_AFTER_CRE.match(lines[index])
     if not match:
         return (None, index)
-    offset = index - cdiff_start_index
-    return (_cdiff_hunk(offset, match), index + 1)
+    return (_cdiff_chunk(match), index + 1)
 
 def _get_cdiff_hunk_at(lines, index, cdiff_start_index):
     if not CDIFF_HUNK_START_CRE.match(lines[index]):
         return (None, index)
-    before_hunk, index = _get_cdiff_before_hunk_at(lines, index + 1, cdiff_start_index)
-    if not before_hunk:
+    before_start_index = index + 1
+    before_chunk, index = _get_cdiff_before_chunk_at(lines, before_start_index)
+    if not before_chunk:
         return (None, index)
     before_count = after_count = 0
     try:
-        after_hunk = None
-        while before_count < before_hunk.length:
-            after_hunk, index = _get_cdiff_after_hunk_at(lines, index, cdiff_start_index)
-            if after_hunk is not None:
+        after_chunk = None
+        while before_count < before_chunk.length:
+            after_start_index = index
+            after_chunk, index = _get_cdiff_after_chunk_at(lines, index)
+            if after_chunk is not None:
                 break
             before_count += 1
             index += 1
-        if after_hunk is None:
-            after_hunk, index = _get_cdiff_after_hunk_at(lines, index, cdiff_start_index)
-            if after_hunk is None:
+        if after_chunk is None:
+            after_start_index = index
+            after_chunk, index = _get_cdiff_after_chunk_at(lines, index)
+            if after_chunk is None:
                 raise ParseError('Failed to find context diff "after" hunk.', index)
-        while after_count < after_hunk.length:
+        while after_count < after_chunk.length:
             if not (lines[index].startswith('! ') or lines[index].startswith('+ ') or lines[index].startswith('  ')):
                 if after_count == 0:
                     break
@@ -527,6 +517,8 @@ def _get_cdiff_hunk_at(lines, index, cdiff_start_index):
             index += 1
     except IndexError:
         raise ParseError('Unexpected end of patch text.')
+    before_hunk = _HUNK(before_start_index - cdiff_start_index, before_chunk.start, before_chunk.length, after_start_index - before_start_index)
+    after_hunk = _HUNK(after_start_index - cdiff_start_index, after_chunk.start, after_chunk.length, index - after_start_index)
     return (_PAIR(before_hunk, after_hunk), index)
 
 class _CDiffData(_DiffData):
@@ -534,37 +526,31 @@ class _CDiffData(_DiffData):
         _DiffData.__init__(self, 'u', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
         bad_lines = list()
-        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.length + 1):
+        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
             if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
                 repl_line = _trim_trailing_ws(self.lines[index])
                 if len(repl_line) != len(self.lines[index]):
                     bad_lines.append(str(hunk.after.start + after_count))
                     if fix:
                         self.lines[index] = repl_line
-            elif not self.lines[index].startswith('  '):
-                if index == hunk.after.offset + 1:
-                    break
+            elif DEBUG and not self.lines[index].startswith('  '):
                 raise Bug('Unexpected end of context diff hunk.')
         return bad_lines
     def _get_hunk_diffstat_stats(self, hunk):
         stats = _DiffStats()
-        finish = min(hunk.after.offset, hunk.before.offset + hunk.before.length + 1)
-        for index in range(hunk.before.offset + 1, finish):
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
             if self.lines[index].startswith('- '):
                 stats.incr('deleted')
             elif self.lines[index].startswith('! '):
                 stats.incr('modified')
-            elif not self.lines[index].startswith('  '):
+            elif DEBUG and not self.lines[index].startswith('  '):
                 raise Bug('Unexpected end of context diff "before" hunk.')
-        finish = min(hunk.after.offset + hunk.after.length + 1, len(self.lines))
-        for index in range(hunk.after.offset + 1, finish):
+        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
             if self.lines[index].startswith('+ '):
                 stats.incr('inserted')
             elif self.lines[index].startswith('! '):
                 stats.incr('modified')
-            elif not self.lines[index].startswith('  '):
-                if index == hunk.after.offset + 1:
-                    break
+            elif DEBUG and not self.lines[index].startswith('  '):
                 raise Bug('Unexpected end of context diff "after" hunk.')
         return stats
 
