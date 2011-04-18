@@ -51,7 +51,11 @@ def process_text(text):
             FILE_MAP[stat.path] += stat.diff_stats
 
 if len(ARGS.arg_patch_list) == 0:
-    process_text(sys.stdin.read())
+    try:
+        process_text(sys.stdin.read())
+    except patchlib.ParseError as pedata:
+        print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno
+        sys.exit(1)
 else:
     bad_files = [filename for filename in ARGS.arg_patch_list if not os.path.isfile(filename)]
     if len(bad_files) > 0:
@@ -61,7 +65,11 @@ else:
             sys.stderr.write('{0} is not a file\n'.format(bad_files[0]))
         sys.exit(1)
     for patch_filename in ARGS.arg_patch_list:
-        process_text(open(patch_filename).read())
+        try:
+            process_text(open(patch_filename).read())
+        except patchlib.ParseError as pedata:
+            print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno, 'FILE:', patch_filename
+            sys.exit(1)
 
 # Sanity check
 assert len(ORDERED_FILE_LIST) == len(FILE_MAP)
