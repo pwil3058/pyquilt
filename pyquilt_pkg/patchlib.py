@@ -396,14 +396,18 @@ class _UDiffData(_DiffData):
         _DiffData.__init__(self, 'u', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
         bad_lines = list()
+        after_count = 0
         for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
             if self.lines[index].startswith('+'):
+                after_count += 1
                 repl_line = _trim_trailing_ws(self.lines[index])
                 if len(repl_line) != len(self.lines[index]):
-                    bad_lines.append(str(hunk.after.start + after_count))
+                    bad_lines.append(str(hunk.after.start + after_count - 1))
                     if fix:
                         self.lines[index] = repl_line
-            elif DEBUG and not (self.lines[index].startswith('-') or self.lines[index].startswith(' ')):
+            elif self.lines[index].startswith(' '):
+                after_count += 1
+            elif DEBUG and not self.lines[index].startswith('-'):
                 raise Bug('Unexpected end of unified diff hunk.')
         return bad_lines
     def _get_hunk_diffstat_stats(self, hunk):
@@ -528,8 +532,9 @@ class _CDiffData(_DiffData):
         bad_lines = list()
         for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
             if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
-                repl_line = _trim_trailing_ws(self.lines[index])
+                repl_line = self.lines[index][:2] + _trim_trailing_ws(self.lines[index][2:])
                 if len(repl_line) != len(self.lines[index]):
+                    after_count = index - (hunk.after.offset + 1)
                     bad_lines.append(str(hunk.after.start + after_count))
                     if fix:
                         self.lines[index] = repl_line
