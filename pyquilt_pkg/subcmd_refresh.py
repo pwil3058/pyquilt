@@ -247,7 +247,7 @@ def run_refresh(args):
     prev_patch_file = patch_file if os.path.isfile(patch_file) else '/dev/null'
     result_content = patchfns.patch_header(prev_patch_file)
     if args.opt_diffstat:
-        diffstat = shell.get_diffstat(patch_content, num_strip_level)
+        diffstat = diffstat.get_diffstat(patch_content, num_strip_level)
         result_content += diffstat
     result_content += patch_content
     patch_file_dir = os.path.dirname(patch_file)

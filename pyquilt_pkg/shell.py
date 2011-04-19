@@ -48,12 +48,6 @@ def run_cmd(cmd, input_text=None, use_shell=True):
         os.environ['TERM'] = oldterm
     return cmd_result.Result(eflags=sub.returncode, stdout=outd, stderr=errd)
 
-def get_diffstat(text, strip_level):
-    diffstat_options = customization.get_default_opts('diffstat')
-    cmd = 'diffstat %s -p%s' % (diffstat_options, strip_level)
-    result = run_cmd(cmd, text)
-    return result.stdout
-
 if os.name == 'nt' or os.name == 'dos':
     def _which(cmd):
         """Return the path of the executable for the given command"""
@@ -64,9 +58,7 @@ if os.name == 'nt' or os.name == 'dos':
                 return potential_path
         return None
 
-
     NT_EXTS = ['.bat', '.bin', '.exe']
-
 
     def which(cmd):
         """Return the path of the executable for the given command"""
