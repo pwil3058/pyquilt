@@ -25,6 +25,7 @@ from pyquilt_pkg import putils
 from pyquilt_pkg import fsutils
 from pyquilt_pkg import shell
 from pyquilt_pkg import output
+from pyquilt_pkg import diffstat
 
 parser = cmd_line.SUB_CMD_PARSER.add_parser(
     'refresh',
@@ -247,8 +248,8 @@ def run_refresh(args):
     prev_patch_file = patch_file if os.path.isfile(patch_file) else '/dev/null'
     result_content = patchfns.patch_header(prev_patch_file)
     if args.opt_diffstat:
-        diffstat = diffstat.get_diffstat(patch_content, num_strip_level)
-        result_content += diffstat
+        diffstat_text = diffstat.get_diffstat(patch_content, num_strip_level)
+        result_content += diffstat_text
     result_content += patch_content
     patch_file_dir = os.path.dirname(patch_file)
     if not os.path.exists(patch_file_dir):

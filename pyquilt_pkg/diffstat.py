@@ -55,6 +55,11 @@ def get_diffstat(text, strip_level, quiet=True):
     args, leftovers = PARSER.parse_known_args(diffstat_options.split())
     if leftovers and not quiet:
         output.error('diffstat default options: %; ignored\n' % ' '.join(leftovers))
-    patch = patchlib.parse_text(text, strip_level)
-    stats_list = patch.get_diffstat_stats()
-    return list_format_diff_stats(stats_list, quiet=args.opt_quiet, comment=args.opt_comment, max_width=int(args.opt_max_width))
+    obj = patchlib.parse_text(text, strip_level)
+    if isinstance(obj, patchlib.Patch):
+        stats_list = obj.get_diffstat_stats()
+    elif isinstance(obj, patchlib.FilePatch):
+        stats_list = [patchlib.FILE_DIFF_STATS(obj.get_file_path(), obj.get_diffstat_stats())]
+    else:
+        return None
+    return patchlib.list_format_diff_stats(stats_list, quiet=args.opt_quiet, comment=args.opt_comment, max_width=int(args.opt_max_width))
