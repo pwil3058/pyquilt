@@ -344,8 +344,9 @@ _GET_PREAMBLE_FUNCS = [_get_git_preamble_at, _get_diff_preamble_at, _get_index_p
 # START: diff extraction code
 # START: Unified Diff Format specific code
 # Compiled regular expressions for unified diff format
-UDIFF_BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
-UDIFF_AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+# Allow comments on end of ---/+++ to pass quilt's comments.test test
+UDIFF_BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?.*$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+UDIFF_AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?.*$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
 UDIFF_HUNK_DATA_CRE = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
 
 def _get_udiff_before_file_data_at(lines, index, strip_level):
@@ -590,7 +591,7 @@ def _get_file_cdiff_at(lines, start_index, strip_level, raise_if_malformed=False
 _GET_DIFF_FUNCS = [_get_file_udiff_at, _get_file_cdiff_at]
 # END: diff extraction code
 
-def parse_lines(lines, num_strip_levels=1):
+def parse_lines(lines, num_strip_levels=0):
     '''Parse list of lines and return a FilePatch of Patch instance as appropriate'''
     strip_level = gen_strip_level_function(num_strip_levels)
     diff_starts_at = None
@@ -628,6 +629,6 @@ def parse_lines(lines, num_strip_levels=1):
     patch.set_header(''.join(lines[0:diff_starts_at]))
     return patch
 
-def parse_text(text, num_strip_levels=1):
+def parse_text(text, num_strip_levels=0):
     '''Parse text and return a FilePatch of Patch instance as appropriate'''
     return parse_lines(text.splitlines(True), num_strip_levels)
