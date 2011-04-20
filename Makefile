@@ -37,6 +37,9 @@ $(TESTDIR)/.%.ok : $(TESTDIR)/%.test
 
 clean :
 	rm -f $(DIRT)
+	rm -f pyquilt_pkg/*.pyc
 
 spotless:
 	rm -fr $(TESTDIR)
+	rm -f pyquilt_pkg/*.pyc pyquilt_pkg/*.orig
+
