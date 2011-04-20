@@ -630,4 +630,4 @@ def parse_lines(lines, num_strip_levels=1):
 
 def parse_text(text, num_strip_levels=1):
     '''Parse text and return a FilePatch of Patch instance as appropriate'''
-    return parse_lines(text.splitlines(True))
+    return parse_lines(text.splitlines(True), num_strip_levels)

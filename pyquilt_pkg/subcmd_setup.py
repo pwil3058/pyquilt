@@ -169,7 +169,7 @@ def run_setup(args):
                     fobj.write('# \n' % action[1])
                 else:
                     fobj = open(this_series_file, 'a')
-                fobj.write('%s\n', action[2])
+                fobj.write('%s\n' % action[2])
                 fobj.close()
     return cmd_result.OK
 

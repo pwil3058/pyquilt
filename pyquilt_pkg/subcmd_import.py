@@ -115,7 +115,7 @@ def run_import(args):
     if args.opt_patch and len(args.patchfiles) > 1:
         output.error('Option `-P\' can only be used when importing a single patch\n')
         return cmd_result.ERROR
-    patch_args = '-p%s' % args.opt_strip if args.opt_strip else ''
+    patch_args = ('-p%s' % args.opt_strip) if args.opt_strip else ''
     if args.opt_reverse:
         patch_args = '-R' if not patch_args else patch_args + ' -R'
     before = patchfns.patch_after(patchfns.top_patch())
@@ -126,7 +126,7 @@ def run_import(args):
             return cmd_result.ERROR
         merged = False
         if patchfns.is_applied(patch):
-            output.error('Patch %s is applied\n', patchfns.print_patch(patch))
+            output.error('Patch %s is applied\n' % patchfns.print_patch(patch))
             return cmd_result.ERROR
         dest = patchfns.patch_file_name(patch)
         if patchfns.patch_in_series(patch):

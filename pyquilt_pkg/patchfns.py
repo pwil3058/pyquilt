@@ -437,7 +437,7 @@ def insert_in_series(patch, patch_args=None, before=None):
         try:
             os.mkdir(series_dir)
         except OSError:
-            output.error('Could not create directory %s\n', series_dir)
+            output.error('Could not create directory %s\n' % series_dir)
             sys.exit(cmd_result.ERROR)
     if isinstance(patch_args, str):
         new_line = patch if not patch_args else ' '.join([patch, patch_args])

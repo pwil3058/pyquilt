@@ -419,8 +419,8 @@ def run_mail(args):
         intro += references_header(args.opt_reply_to)
     intro += 'Subject-Prefix: [%s @num@/@total@]\n' % args.opt_prefix
     intro += 'Subject: %s\n\n' % (args.opt_subject if args.opt_subject else '')
-    intro += '%s\n\n' % args.opt_message if args.opt_message else ''
-    intro += '-- \n%s\n' % args.opt_signature if args.opt_signature else ''
+    intro += ('%s\n\n' % args.opt_message) if args.opt_message else ''
+    intro += ('-- \n%s\n' % args.opt_signature) if args.opt_signature else ''
     intro_message = email.message_from_string(intro)
     intro_message.set_charset(args.opt_charset)
     if not args.opt_message:

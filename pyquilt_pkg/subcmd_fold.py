@@ -114,7 +114,7 @@ def run_fold(args):
             try:
                 shutil.move(os.path.join(workdir, filename), filename)
             except OSError:
-                output.error('File %s may be corrupted\n', filename)
+                output.error('File %s may be corrupted\n' % filename)
     if os.path.exists(workdir):
         shutil.rmtree(workdir)
     return cmd_result.OK if not failed else cmd_result.ERROR_SUGGEST_FORCE if suggest_force else cmd_result.ERROR
