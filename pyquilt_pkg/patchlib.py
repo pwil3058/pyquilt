@@ -199,6 +199,10 @@ class _DiffData:
     def get_file_paths(self):
         return _PAIR(self.file_data.before.path, self.file_data.after.path)
 
+ADDED = 'A'
+EXTANT = 'E'
+DELETED = 'D'
+
 class FilePatch:
     '''Class to hold patch (headerless) information relavent to a single file.'''
     def __init__(self):

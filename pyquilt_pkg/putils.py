@@ -408,161 +408,18 @@ def set_patch_hdr_lines(path, lines):
 def set_patch_hdr(path, text):
     return set_patch_hdr_lines(path, text.splitlines(True))
 
-ADDED = "A"
-EXTANT = "M"
-DELETED = "R"
-
-def strip_zero_levels(path):
-    return path
-
-def strip_one_level(path):
-    return path.split('/', 1)[1]
-
-def _file_name_in_diffline(diffline):
-    match = re.match('diff --git \w+/(.*) \w+/(.*)', diffline)
-    if match:
-        return match.group(1)
-    else:
-        return None
-
-def _get_git_diff_file_data(lines, i):
-    assert _GIT_HDR_DIFF.match(lines[i])
-    diffline = lines[i]
-    i += 1
-    new_file = False
-    deleted_file = False
-    copy_from = None
-    copy_to = None
-    rename_from = None
-    rename_to = None
-    while i < len(lines):
-        match_data = _is_git_extra_line(lines[i])
-        if not match_data:
-            break
-        else:
-            i += 1
-            regex, match = match_data
-        if regex is _GIT_COPY_FROM:
-            copy_from = match.group(1)
-        elif regex is _GIT_COPY_TO:
-            copy_to = match.group(1)
-        elif regex is _GIT_RENAME_FROM:
-            rename_from = match.group(1)
-        elif regex is _GIT_RENAME_TO:
-            rename_from = match.group(1)
-        elif regex is _GIT_NEW_FILE_MODE:
-            new_file = True
-        elif regex is _GIT_DELETED_FILE_MODE:
-            deleted_file = True
-    if copy_to:
-        return [i, [(copy_to, ADDED, copy_from)]]
-    if rename_to:
-        return [i, [(rename_to, ADDED, rename_from), (rename_from, DELETED, None)]]
-    if deleted_file:
-        while i < len(lines):
-            match = _UDIFF_H1.match(lines[i])
-            i += 1
-            if match:
-                filename = match.group(1)[2:]
-                return [i, [(filename, DELETED, None)]]
-    while i < len(lines) and not _GIT_HDR_DIFF.match(lines[i]):
-        match = _UDIFF_H2.match(lines[i])
-        i += 1
-        if match:
-            filename = match.group(1)[2:]
-            if new_file:
-                return [i, [(filename, ADDED, None)]]
-            else:
-                return [i, [(filename, EXTANT, None)]]
-    filename = _file_name_in_diffline(diffline)
-    if new_file:
-        return (i, [[filename, ADDED, None]])
-    else:
-        return (i, [[filename, EXTANT, None]])
-
-def _get_git_diff_files(lines, i):
-    files = []
-    while i < len(lines):
-        i, files_data = _get_git_diff_file_data(lines, i)
-        files += files_data
-        while i < len(lines) and not _git_diff_starts_at(lines, i):
-            i += 1
-    return files
-
-def _get_unified_diff_files(lines, i, strip_req_level=strip_one_level):
-    files = []
-    while i < len(lines):
-        match1 = _UDIFF_H1.match(lines[i])
-        i += 1
-        if match1:
-            match2 = _UDIFF_H2.match(lines[i])
-            i += 1
-            file1 = match1.group(1)
-            if file1 == '/dev/null':
-                files.append((strip_req_level(match2.group(1)), ADDED, None))
-            else:
-                file2 = match2.group(1)
-                if file2 == '/dev/null' :
-                    files.append((strip_req_level(file1), DELETED, None))
-                else:
-                    files.append((strip_req_level(file2), EXTANT, None))
-    return files
-
-def _get_combined_diff_files(lines, i, strip_req_level=strip_one_level):
-    files = []
-    while i < len(lines):
-        match1 = _CDIFF_H1.match(lines[i])
-        i += 1
-        if not match1:
-            continue
-        match2 = _CDIFF_H2.match(lines[i])
-        if not match2:
-            continue
-        match3 = _CDIFF_H3.match(lines[i + 1])
-        if not match3:
-            continue
-        if not (_CDIFF_CHG.match(lines[i + 2]) or  _CDIFF_DEL.match(lines[i + 2])):
-            continue
-        if i >= 3:
-            matchIndex = _HDR_INDEX.match(lines[i-3])
-            sepIndex = _HDR_SEP.match(lines[i-2])
-            if matchIndex and sepIndex:
-                files.append(matchIndex.group(1))
-                i += 2
-                continue
-        if match2.group(1) != '/dev/null':
-            files.append(strip_req_level(match2.group(1)))
-        else:
-            files.append(strip_req_level(match1.group(1)))
-        i += 2
-    return files
-
-def get_patch_files(path, status=True, decorated=False, strip_level=1):
-    strip_level = strip_zero_levels if int(strip_level) == 0 else strip_one_level
+def get_patch_files(path, strip_level=1):
     try:
         buf = fsutils.get_file_contents(path)
     except IOError:
         return (False, 'Problem(s) open file "%s" not found' % path)
-    lines = buf.splitlines(True)
-    _, patch = _trisect_patch_lines(lines)
-    if patch is None:
-        return (True, [])
-    if patch[1] == 'git':
-        files = _get_git_diff_files(lines, patch[0])
-    elif patch[1] == 'u':
-        files = _get_unified_diff_files(lines, patch[0], strip_level)
+    obj = patchlib.parse_text(buf, int(strip_level))
+    if isinstance(obj, patchlib.Patch):
+        return obj.get_file_paths()
+    elif isinstance(obj, patchlib.FilePatch):
+        return [obj.get_file_path()]
     else:
-        files = _get_combined_diff_files(lines, patch[0], strip_level)
-    if decorated:
-        filelist = []
-        for file_data in files:
-            filelist.append(' '.join([file_data[1], file_data[0]]))
-            if file_data[1] == ADDED and file_data[2]:
-                filelist.append('  %s' % file_data[2])
-        return (True, filelist)
-    elif status:
-        return (True, files)
-    return (True, [file_data[0] for file_data in files])
+        return []
 
 def apply_patch_text(text, indir=None, patch_args=''):
     from pyquilt_pkg import customization

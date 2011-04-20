@@ -61,7 +61,7 @@ def scan_unapplied(category, prefix, file_path, patches):
     for patch in patches:
         strip = patchfns.patch_strip_level(patch)
         pfn = patchfns.patch_file_name(patch)
-        patch_files = putils.get_patch_files(pfn, status=False, strip_level=strip)
+        patch_files = putils.get_patch_files(pfn, strip_level=strip)
         if file_path in patch_files:
             output.write(colour.wrap('%s%s\n' % (prefix, patchfns.print_patch(patch)), category))
 

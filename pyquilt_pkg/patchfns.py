@@ -548,9 +548,7 @@ def file_names_in_patch(patch):
         patch_level = patch_strip_level(patch)
         if patch_level == 'ab':
             patch_level = 1
-        is_ok, file_names = putils.get_patch_files(patch_file, status=False, strip_level=patch_level)
-        if is_ok:
-            return file_names
+        return putils.get_patch_files(patch_file, strip_level=patch_level)
     return []
 
 def files_in_patch_ordered(patch):
