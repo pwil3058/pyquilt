@@ -314,26 +314,28 @@ def get_patch_hdr(path):
     else:
         return ''.join(lines)
 
-def get_patch_diff_fm_text(textbuf):
-    lines = textbuf.splitlines(True)
-    _, patch = _trisect_patch_lines(lines)
-    if patch is None:
-        return ''
-    return ''.join(lines[patch[0]:])
+def get_patch_diff_fm_text(textbuf, file_list=None, strip_level=0):
+    obj = patchlib.parse_text(textbuf, strip_level)
+    if not file_list:
+        if isinstance(obj, patchlib.Patch):
+            return ''.join([x.get_as_string() for x in obj.file_patches])
+        elif isinstance(obj, patchlib.FilePatch):
+            return obj.get_as_string()
+        else:
+            raise patchlib.Bug('Unknown return type')
+    else:
+        if isinstance(obj, patchlib.Patch):
+            return ''.join([x.get_as_string() for x in obj.file_patches if x.get_file_path() in file_list])
+        elif isinstance(obj, patchlib.FilePatch):
+            if obj.get_file_path() in file_list:
+                return obj.get_as_string()
+            else:
+                return ''
+        else:
+            raise patchlib.Bug('Unknown return type')
 
 def get_patch_diff(path, file_list=None):
-    if not file_list:
-        return get_patch_diff_fm_text(fsutils.get_file_contents(path))
-    if not shell.which("filterdiff"):
-        return (False, "This functionality requires \"filterdiff\" from \"patchutils\"")
-    cmd = "filterdiff -p 1"
-    for filename in file_list:
-        cmd += " -i %s" % filename
-    res, sout, serr = shell.run_cmd("%s %s" % (cmd, path))
-    if res == 0:
-        return (True, sout)
-    else:
-        return (False, sout + serr)
+    return get_patch_diff_fm_text(fsutils.get_file_contents(path), file_list)
 
 def _lines_to_temp_file(lines, dummyfor=None):
     if dummyfor:
