@@ -132,11 +132,62 @@ def list_format_diff_stats(stats_list, quiet=False, comment=False, trim_names=Fa
         string += '\n'
     return string
 
+DIFFSTAT_EMPTY_CRE = re.compile("^#? 0 files changed$")
+DIFFSTAT_END_CRE = re.compile("^#? (\d+) files? changed(, (\d+) insertions?\(\+\))?(, (\d+) deletions?\(-\))?(, (\d+) modifications?\(\!\))?$")
+DIFFSTAT_FSTATS_CRE = re.compile("^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)?))$")
+_BLANK_LINE = re.compile("^\s*$")
+_DIVIDER_LINE = re.compile("^---$")
+
 class _Header:
     def __init__(self, text=''):
-        self.lines = text.splitlines(True)
+        lines = text.splitlines(True)
+        descr_starts_at = 0
+        for line in lines:
+            if not line.startswith('#'):
+                break
+            descr_starts_at += 1
+        self.comment_lines = lines[:descr_starts_at]
+        diffstat_starts_at = None
+        index = descr_starts_at
+        while index < len(lines):
+            if _DIVIDER_LINE.match(lines[index]):
+                diffstat_starts_at = index
+            elif DIFFSTAT_EMPTY_CRE.match(lines[index]):
+                if diffstat_starts_at is None:
+                    diffstat_starts_at = index
+                break
+            elif DIFFSTAT_FSTATS_CRE.match(lines[index]):
+                index += 1
+                while index < len(lines) and DIFFSTAT_FSTATS_CRE.match(lines[index]):
+                    index += 1
+                if (index < len(lines) and DIFFSTAT_END_CRE.match(lines[index])):
+                    break
+                else:
+                    diffstat_starts_at = None
+                    continue
+            elif not _DIVIDER_LINE.match(lines[index]):
+                diffstat_starts_at = None
+            index += 1
+        if diffstat_starts_at is not None:
+            self.description_lines = lines[descr_starts_at:diffstat_starts_at]
+            self.diffstat_lines = lines[diffstat_starts_at:]
+        else:
+            self.description_lines = lines[descr_starts_at:]
+            self.diffstat_lines = []
     def get_as_string(self):
-        return ''.join(self.lines)
+        return self.get_comments() + self.get_description() + self.get_diffstat()
+    def get_comments(self):
+        return ''.join(self.comment_lines)
+    def get_description(self):
+        return ''.join(self.description_lines)
+    def get_diffstat(self):
+        return ''.join(self.diffstat_lines)
+    def set_comments(self, text):
+        self.comment_lines = text.splitlines(True)
+    def set_description(self, text):
+        self.description_lines = text.splitlines(True)
+    def set_diffstat(self, text):
+        self.diffstat_lines = text.splitlines(True)
 
 class _Preamble:
     def __init__(self, preamble_type, lines, file_data, extras=None):
@@ -244,6 +295,27 @@ class Patch:
         return '' if self.header is None else self.header.get_as_string()
     def set_header(self, text):
         self.header = _Header(text)
+    def get_comments(self):
+        return '' if self.header is None else self.header.get_comments()
+    def set_comments(self, text):
+        if not self.header:
+            self.header = _Header(text)
+        else:
+            self.header.set_comments(text)
+    def get_description(self):
+        return '' if self.header is None else self.header.get_description()
+    def set_description(self, text):
+        if not self.header:
+            self.header = _Header(text)
+        else:
+            self.header.set_description(text)
+    def get_header_diffstat(self):
+        return '' if self.header is None else self.header.get_diffstat()
+    def set_header_diffstat(self, text):
+        if not self.header:
+            self.header = _Header(text)
+        else:
+            self.header.set_diffstat(text)
     def get_as_string(self):
         string = self.get_header()
         for file_patch in self.file_patches:
@@ -328,7 +400,7 @@ def _get_diff_preamble_at(lines, index, raise_if_malformed):
 # END: diff preamble extraction code
 
 # START: Index: preamble extraction code
-INDEX_PREAMBLE_FILE_RCE = re.compile("^Index:\s+({0})$".format(_PATH_RE_STR))
+INDEX_PREAMBLE_FILE_RCE = re.compile("^Index:\s+({0})(.*)$".format(_PATH_RE_STR))
 INDEX_PREAMBLE_SEP_RCE = re.compile("^==*$")
 
 def _get_index_preamble_at(lines, index, raise_if_malformed):
@@ -336,7 +408,7 @@ def _get_index_preamble_at(lines, index, raise_if_malformed):
     if not match:
         return (None, index)
     filename = match.group(2) if match.group(2) else match.group(3)
-    next_index = index + (2 if INDEX_PREAMBLE_SEP_RCE.match(lines[index + 1]) else 1)
+    next_index = index + (2 if (index + 1) < len(lines) and INDEX_PREAMBLE_SEP_RCE.match(lines[index + 1]) else 1)
     return (_Preamble('index', lines[index:next_index], filename), next_index)
 # END: Index: preamble extraction code
 
@@ -427,6 +499,8 @@ class _UDiffData(_DiffData):
         return stats
 
 def _get_file_udiff_at(lines, start_index, strip_level, raise_if_malformed=False):
+    if len(lines) - start_index < 2:
+        return (None, start_index)
     hunks = list()
     index = start_index
     before_file_data, index = _get_udiff_before_file_data_at(lines, index, strip_level)
@@ -565,6 +639,8 @@ class _CDiffData(_DiffData):
         return stats
 
 def _get_file_cdiff_at(lines, start_index, strip_level, raise_if_malformed=False):
+    if len(lines) - start_index < 2:
+        return (None, start_index)
     hunks = list()
     index = start_index
     before_file_data, index = _get_cdiff_before_file_data_at(lines, index, strip_level)
@@ -595,7 +671,7 @@ def _get_file_cdiff_at(lines, start_index, strip_level, raise_if_malformed=False
 _GET_DIFF_FUNCS = [_get_file_udiff_at, _get_file_cdiff_at]
 # END: diff extraction code
 
-def parse_lines(lines, num_strip_levels=0):
+def parse_lines(lines, num_strip_levels=0, simplify=False):
     '''Parse list of lines and return a FilePatch of Patch instance as appropriate'''
     strip_level = gen_strip_level_function(num_strip_levels)
     diff_starts_at = None
@@ -626,13 +702,13 @@ def parse_lines(lines, num_strip_levels=0):
         elif last_file_patch:
             last_file_patch.trailing_junk.append(lines[index])
         index += 1
-    if diff_starts_at == 0 and len(file_patches) == 1:
+    if simplify and (diff_starts_at == 0 and len(file_patches) == 1):
         return last_file_patch
     patch = Patch(num_strip_levels)
     patch.file_patches = file_patches
     patch.set_header(''.join(lines[0:diff_starts_at]))
     return patch
 
-def parse_text(text, num_strip_levels=0):
+def parse_text(text, num_strip_levels=0, simplify=False):
     '''Parse text and return a FilePatch of Patch instance as appropriate'''
-    return parse_lines(text.splitlines(True), num_strip_levels)
+    return parse_lines(text.splitlines(True), num_strip_levels, simplify)

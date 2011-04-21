@@ -190,7 +190,7 @@ def format_address(display, address, charset):
     return email.utils.formataddr((display, address))
 
 def message_from_patch(text, charset):
-    header = putils.extract_header(text)
+    header = putils.get_patch_hdr_fm_text(text)
     subject = email.message_from_string(header)['Subject']
     if subject:
         msg = email.message_from_string(text)

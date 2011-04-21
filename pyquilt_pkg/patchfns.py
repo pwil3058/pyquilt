@@ -584,7 +584,7 @@ def patch_strip_level(patch):
     return '1'
 
 def patch_header(patch_filnm):
-    return putils.get_patch_descr(patch_filnm)
+    return putils.get_patch_hdr(patch_filnm)
 
 def first_modified_by(filename, patches):
     if not patches:

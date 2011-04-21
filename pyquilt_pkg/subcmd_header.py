@@ -89,7 +89,7 @@ def run_header(args):
             return re.sub('[ \t]+\n]', '\n', text)
         return text
     def get_text(pfile):
-        text = putils.get_patch_descr(pfile) if args.opt_strip_diffstat else putils.get_patch_hdr(pfile)
+        text = putils.get_patch_hdr(pfile, omit_diffstat=args.opt_strip_diffstat)
         if args.opt_strip_trailing_whitespace:
             return re.sub('[ \t]+\n]', '\n', text)
         return text
@@ -99,10 +99,7 @@ def run_header(args):
                 shutil.copy2(pfile, pfile + '~')
             except Exception as edata:
                 output.perror(edata)
-        if args.opt_strip_diffstat:
-            putils.set_patch_descr(pfile, text)
-        else:
-            putils.set_patch_hdr(pfile, text)
+        putils.set_patch_hdr(pfile, text, omit_diffstat=args.opt_strip_diffstat)
     patchfns.chdir_to_base_dir()
     if not args.opt_backup:
         args.opt_backup = customization.get_config('QUILT_BACKUP')
