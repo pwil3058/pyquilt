@@ -82,16 +82,23 @@ parser.add_argument(
     nargs='?',
 )
 
+def _trim_trailing_ws(text):
+    '''Return the given text with any trailing white space removed'''
+    lines = text.splitlines(True)
+    for index in range(len(lines)):
+        lines[index] = re.sub('[ \t]+$', '', lines[index])
+    return ''.join(lines)
+
 def run_header(args):
     def read_input():
         text = sys.stdin.read()
         if args.opt_strip_trailing_whitespace:
-            return re.sub('[ \t]+\n]', '\n', text)
+            return _trim_trailing_ws(text)
         return text
     def get_text(pfile):
         text = putils.get_patch_hdr(pfile, omit_diffstat=args.opt_strip_diffstat)
         if args.opt_strip_trailing_whitespace:
-            return re.sub('[ \t]+\n]', '\n', text)
+            return _trim_trailing_ws(text)
         return text
     def set_text(pfile, text):
         if args.opt_backup:
@@ -99,6 +106,8 @@ def run_header(args):
                 shutil.copy2(pfile, pfile + '~')
             except Exception as edata:
                 output.perror(edata)
+        if args.opt_strip_trailing_whitespace:
+            text = _trim_trailing_ws(text)
         putils.set_patch_hdr(pfile, text, omit_diffstat=args.opt_strip_diffstat)
     patchfns.chdir_to_base_dir()
     if not args.opt_backup:
