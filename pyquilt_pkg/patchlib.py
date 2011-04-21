@@ -247,8 +247,9 @@ class _DiffData:
         for hunk in self.hunks:
             stats += self._get_hunk_diffstat_stats(hunk)
         return stats
-    def get_file_paths(self):
-        return _PAIR(self.file_data.before.path, self.file_data.after.path)
+    def get_file_paths(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        return _PAIR(strip(self.file_data.before.path), strip(self.file_data.after.path))
 
 ADDED = 'A'
 EXTANT = 'E'
@@ -279,18 +280,20 @@ class FilePatch:
         if self.diff is None:
             return _DiffStats()
         return self.diff.get_diffstat_stats()
-    def get_file_path(self):
+    def get_file_path(self, strip_level):
         if not self.diff:
             return _determine_file_name(_PAIR(None, None), self.preambles)
-        return _determine_file_name(self.diff.get_file_paths(), self.preambles)
+        return _determine_file_name(self.diff.get_file_paths(strip_level=strip_level), self.preambles)
 
 class Patch:
     '''Class to hold patch information relavent to multiple files with
     an optional header (or a single file with a header).'''
-    def __init__(self, num_strip_levels):
-        self.num_strip_levels = num_strip_levels
+    def __init__(self, num_strip_levels=0):
+        self.num_strip_levels = int(num_strip_levels)
         self.header = None
         self.file_patches = list()
+    def set_strip_level(self, strip_level):
+        self.num_strip_levels = int(strip_level)
     def get_header(self):
         return '' if self.header is None else self.header.get_as_string()
     def set_header(self, text):
@@ -321,24 +324,28 @@ class Patch:
         for file_patch in self.file_patches:
             string += file_patch.get_as_string()
         return string
-    def get_file_paths(self):
-        return [file_patch.get_file_path() for file_patch in self.file_patches]
-    def get_diffstat_stats(self):
-        return [FILE_DIFF_STATS(file_patch.get_file_path(), file_patch.get_diffstat_stats()) for file_patch in self.file_patches]
-    def fix_trailing_whitespace(self):
+    def get_file_paths(self, strip_level=None):
+        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        return [file_patch.get_file_path(strip_level=strip_level) for file_patch in self.file_patches]
+    def get_diffstat_stats(self, strip_level=None):
+        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        return [FILE_DIFF_STATS(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches]
+    def fix_trailing_whitespace(self, strip_level=None):
+        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
         reports = []
         for file_patch in self.file_patches:
             bad_lines = file_patch.fix_trailing_whitespace()
             if bad_lines:
-                path = file_patch.get_file_path()
+                path = file_patch.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
-    def report_trailing_whitespace(self):
+    def report_trailing_whitespace(self, strip_level=None):
+        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
         reports = []
         for file_patch in self.file_patches:
             bad_lines = file_patch.report_trailing_whitespace()
             if bad_lines:
-                path = file_patch.get_file_path()
+                path = file_patch.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
 
@@ -425,19 +432,19 @@ UDIFF_BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?.*$'.format(_PATH_RE_STR,
 UDIFF_AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?.*$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
 UDIFF_HUNK_DATA_CRE = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
 
-def _get_udiff_before_file_data_at(lines, index, strip_level):
+def _get_udiff_before_file_data_at(lines, index):
     match = UDIFF_BEFORE_FILE_CRE.match(lines[index])
     if not match:
         return (None, index)
     filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(strip_level(filename), match.group(4)), index + 1)
+    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
 
-def _get_udiff_after_file_data_at(lines, index, strip_level):
+def _get_udiff_after_file_data_at(lines, index):
     match = UDIFF_AFTER_FILE_CRE.match(lines[index])
     if not match:
         return (None, index)
     filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(strip_level(filename), match.group(4)), index + 1)
+    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
 
 def _get_udiff_hunk_at(lines, index, udiff_start_index):
     match = UDIFF_HUNK_DATA_CRE.match(lines[index])
@@ -498,15 +505,15 @@ class _UDiffData(_DiffData):
                 raise Bug('Unexpected end of unified diff hunk.')
         return stats
 
-def _get_file_udiff_at(lines, start_index, strip_level, raise_if_malformed=False):
+def _get_file_udiff_at(lines, start_index, raise_if_malformed=False):
     if len(lines) - start_index < 2:
         return (None, start_index)
     hunks = list()
     index = start_index
-    before_file_data, index = _get_udiff_before_file_data_at(lines, index, strip_level)
+    before_file_data, index = _get_udiff_before_file_data_at(lines, index)
     if not before_file_data:
         return (None, start_index)
-    after_file_data, index = _get_udiff_after_file_data_at(lines, index, strip_level)
+    after_file_data, index = _get_udiff_after_file_data_at(lines, index)
     if not after_file_data:
         if raise_if_malformed:
             raise ParseError('Missing unified diff after file data.', index)
@@ -534,19 +541,19 @@ CDIFF_HUNK_START_CRE = re.compile('^\*{15}\s*(.*)$')
 CDIFF_HUNK_BEFORE_CRE = re.compile('^\*\*\*\s+(\d+)(,(\d+))?\s+\*\*\*\*\s*(.*)$')
 CDIFF_HUNK_AFTER_CRE = re.compile('^---\s+(\d+)(,(\d+))?\s+----(.*)$')
 
-def _get_cdiff_before_file_data_at(lines, index, strip_level):
+def _get_cdiff_before_file_data_at(lines, index):
     match = CDIFF_BEFORE_FILE_CRE.match(lines[index])
     if not match:
         return (None, index)
     filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(strip_level(filename), match.group(4)), index + 1)
+    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
 
-def _get_cdiff_after_file_data_at(lines, index, strip_level):
+def _get_cdiff_after_file_data_at(lines, index):
     match = CDIFF_AFTER_FILE_CRE.match(lines[index])
     if not match:
         return (None, index)
     filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(strip_level(filename), match.group(4)), index + 1)
+    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
 
 def _cdiff_chunk(match):
     start = int(match.group(1))
@@ -638,15 +645,15 @@ class _CDiffData(_DiffData):
                 raise Bug('Unexpected end of context diff "after" hunk.')
         return stats
 
-def _get_file_cdiff_at(lines, start_index, strip_level, raise_if_malformed=False):
+def _get_file_cdiff_at(lines, start_index, raise_if_malformed=False):
     if len(lines) - start_index < 2:
         return (None, start_index)
     hunks = list()
     index = start_index
-    before_file_data, index = _get_cdiff_before_file_data_at(lines, index, strip_level)
+    before_file_data, index = _get_cdiff_before_file_data_at(lines, index)
     if not before_file_data:
         return (None, start_index)
-    after_file_data, index = _get_cdiff_after_file_data_at(lines, index, strip_level)
+    after_file_data, index = _get_cdiff_after_file_data_at(lines, index)
     if not after_file_data:
         if raise_if_malformed:
             raise ParseError('Missing unified diff after file data.', index)
@@ -671,9 +678,8 @@ def _get_file_cdiff_at(lines, start_index, strip_level, raise_if_malformed=False
 _GET_DIFF_FUNCS = [_get_file_udiff_at, _get_file_cdiff_at]
 # END: diff extraction code
 
-def parse_lines(lines, num_strip_levels=0, simplify=False):
+def parse_lines(lines, simplify=False):
     '''Parse list of lines and return a FilePatch of Patch instance as appropriate'''
-    strip_level = gen_strip_level_function(num_strip_levels)
     diff_starts_at = None
     file_patches = list()
     index = 0
@@ -687,7 +693,7 @@ def parse_lines(lines, num_strip_levels=0, simplify=False):
             if preamble:
                 preambles.append(preamble)
         for get_file_diff_at in _GET_DIFF_FUNCS:
-            diff_data, index = get_file_diff_at(lines, index, strip_level, raise_if_malformed)
+            diff_data, index = get_file_diff_at(lines, index, raise_if_malformed)
             if diff_data:
                 break
         if diff_data:
@@ -704,11 +710,11 @@ def parse_lines(lines, num_strip_levels=0, simplify=False):
         index += 1
     if simplify and (diff_starts_at == 0 and len(file_patches) == 1):
         return last_file_patch
-    patch = Patch(num_strip_levels)
+    patch = Patch()
     patch.file_patches = file_patches
     patch.set_header(''.join(lines[0:diff_starts_at]))
     return patch
 
-def parse_text(text, num_strip_levels=0, simplify=False):
+def parse_text(text, simplify=False):
     '''Parse text and return a FilePatch of Patch instance as appropriate'''
-    return parse_lines(text.splitlines(True), num_strip_levels, simplify)
+    return parse_lines(text.splitlines(True), simplify)

@@ -42,8 +42,8 @@ ARGS = PARSER.parse_args()
 ORDERED_FILE_LIST = []
 FILE_MAP = {}
 
-def process_text(text):
-    for stat in patchlib.parse_text(text).get_diffstat_stats():
+def process_text(text, strip_level=1):
+    for stat in patchlib.parse_text(text).get_diffstat_stats(strip_level):
         if not stat.path in ORDERED_FILE_LIST:
             ORDERED_FILE_LIST.append(stat.path)
             FILE_MAP[stat.path] = stat.diff_stats

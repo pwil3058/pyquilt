@@ -50,11 +50,12 @@ def get_patch_hdr(path, omit_diffstat=False):
     return get_patch_hdr_fm_text(buf, omit_diffstat)
 
 def get_patch_diff_fm_text(text, file_list=None, strip_level=0):
-    obj = patchlib.parse_text(text, int(strip_level))
+    obj = patchlib.parse_text(text)
     if not file_list:
         return ''.join([x.get_as_string() for x in obj.file_patches])
     else:
-        return ''.join([x.get_as_string() for x in obj.file_patches if x.get_file_path() in file_list])
+        num_strip_level = int(strip_level)
+        return ''.join([x.get_as_string() for x in obj.file_patches if x.get_file_path(num_strip_level) in file_list])
 
 def get_patch_diff(path, file_list=None, strip_level=0):
     return get_patch_diff_fm_text(fsutils.get_file_contents(path), file_list, strip_level)
@@ -103,8 +104,8 @@ def get_patch_files(path, strip_level=1):
         buf = fsutils.get_file_contents(path)
     except IOError:
         return (False, 'Problem(s) open file "%s" not found' % path)
-    obj = patchlib.parse_text(buf, int(strip_level))
-    return obj.get_file_paths()
+    obj = patchlib.parse_text(buf)
+    return obj.get_file_paths(int(strip_level))
 
 def apply_patch_text(text, indir=None, patch_args=''):
     from pyquilt_pkg import customization
@@ -121,8 +122,8 @@ def apply_patch(patch_file, indir=None, patch_args=''):
     return apply_patch_text(text, indir=indir, patch_args=patch_args)
 
 def remove_trailing_ws(text, strip_level, dry_run=False):
-    obj = patchlib.parse_text(text, int(strip_level))
-    report = obj.fix_trailing_whitespace()
+    obj = patchlib.parse_text(text)
+    report = obj.fix_trailing_whitespace(int(strip_level))
     errtext = ''
     if dry_run:
         for filename, bad_lines in report:

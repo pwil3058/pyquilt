@@ -50,14 +50,14 @@ except patchlib.ParseError as pedata:
     sys.exit(1)
 
 if ARGS.opt_dry_run:
-    reports = patch.report_trailing_whitespace()
+    reports = patch.report_trailing_whitespace(strip_level=1)
     for filename, bad_lines in reports:
         if len(bad_lines) > 1:
             sys.stderr.write('Warning: trailing whitespace in lines %s of %s\n' % (','.join(bad_lines), filename))
         else:
             sys.stderr.write('Warning: trailing whitespace in line %s of %s\n' % (bad_lines[0], filename))
 else:
-    reports = patch.fix_trailing_whitespace()
+    reports = patch.fix_trailing_whitespace(strip_level=1)
     if not ARGS.arg_patch_file:
         sys.stdout.write(patch.get_as_string())
     else:
