@@ -27,6 +27,7 @@ _FILE_AND_TS = collections.namedtuple('_FILE_AND_TS', ['path', 'timestamp',])
 _FILE_AND_TWS_LINES = collections.namedtuple('_FILE_AND_TWS_LINES', ['path', 'tws_lines',])
 _DIFF_DATA = collections.namedtuple('_DIFF_DATA', ['file_data', 'hunks',])
 FILE_DIFF_STATS = collections.namedtuple('FILE_DIFF_STATS', ['path', 'diff_stats'])
+_FILE_PATH_PLUS = collections.namedtuple('_FILE_PATH_PLUS', ['path', 'status', 'expath'])
 
 class ParseError(Exception):
     def __init__(self, message, lineno=None):
@@ -38,6 +39,7 @@ class Bug(Exception): pass
 
 def gen_strip_level_function(level):
     '''Return a function for stripping the specified levels off a file path'''
+    level = int(level)
     return lambda string: string if string.startswith(os.sep) else string.split(os.sep, level)[level]
 
 def get_common_path(filelist):
@@ -189,38 +191,99 @@ class _Header:
     def set_diffstat(self, text):
         self.diffstat_lines = text.splitlines(True)
 
+ADDED = 'A'
+EXTANT = 'E'
+DELETED = 'D'
+
+def _is_non_null(path):
+    return path and path != '/dev/null'
+
+def _file_path_fm_pair(pair, strip=lambda x: x):
+    path = lambda x: x if isinstance(x, str) else x.path
+    after = path(pair.after)
+    if _is_non_null(after):
+        return strip(after)
+    before = path(pair.before)
+    if _is_non_null(before):
+        return strip(before)
+    return None
+
+def _file_path_plus_fm_pair(paths, strip=lambda x: x):
+    path = lambda x: x if isinstance(x, str) else x.path
+    path = None
+    status = None
+    after = path(pair.after)
+    before = path(pair.before)
+    if _is_non_null(after):
+        path = strip(after)
+        status = EXTANT if _is_non_null(before) else ADDED
+    elif _is_non_null(before):
+        path = strip(before)
+        status = DELETED
+    else:
+        return None
+    return _FILE_PATH_PLUS(path=path, status=status, expath=None)
+
 class _Preamble:
     def __init__(self, preamble_type, lines, file_data, extras=None):
         self.preamble_type = preamble_type
         self.lines = lines
         self.file_data = file_data
         self.extras = extras
-    def get_file_name(self):
+    def get_file_path(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
         if isinstance(self.file_data, str):
-            return self.file_data
+            return strip(self.file_data)
         elif isinstance(self.file_data, _PAIR):
-            if self.file_data.after and self.file_data.after != '/dev/null':
-                return self.file_data.after
-            elif self.file_data.before and self.file_data.before != '/dev/null':
-                return self.file_data.before
-            else:
-                return None
+            return _file_path_fm_pair(self.file_data, strip)
+        else:
+            return None
+    def get_file_path_plus(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        if isinstance(self.file_data, str):
+            return _FILE_PATH_PLUS(path=strip(self.file_data), status=None, expath=None)
+        elif isinstance(self.file_data, _PAIR):
+            return _file_path_plus_fm_pair(self.file_data, strip)
+        else:
+            return None
+    def get_file_expath(self, strip_level=0):
+        return None
 
-def _determine_file_name(paths, preambles):
-    if paths.after and paths.after != '/dev/null':
-        return paths.after
-    elif paths.before and paths.before != '/dev/null':
-        return paths.before
-    else:
-        names = {}
+def _get_file_path_fm_preambles(preambles, strip_level=0):
+        paths = {}
         for preamble in preambles:
-            name = preamble.get_file_name()
-            if name:
-                names[preamble.preamble_type] = name
+            path = preamble.get_file_path(strip_level=strip_level)
+            if path:
+                paths[preamble.preamble_type] = path
+        # Key order indicates data source precedence
         for key in ['index', 'git', 'diff']:
-            if key in names:
-                return names[key]
-    return None
+            if key in paths:
+                return paths[key]
+        return None
+
+def _get_file_path_plus_fm_preambles(preambles, strip_level=0):
+        paths_plus = {}
+        for preamble in preambles:
+            path_plus = preamble.get_file_path_plus(strip_level=strip_level)
+            if path_plus:
+                paths_plus[preamble.preamble_type] = path_plus
+        # Key order indicates data source precedence
+        for key in ['git', 'index', 'diff']:
+            if key in paths_plus:
+                return paths_plus[key]
+        return None
+
+def _get_file_expath_fm_preambles(preambles, strip_level=0):
+        expaths = {}
+        for preamble in preambles:
+            expath = preamble.get_file_expath(strip_level=strip_level)
+            if expath:
+                expaths[preamble.preamble_type] = expath
+        # Key order indicates data source precedence
+        for key in ['git', 'index', 'diff']:
+            if key in expaths:
+                return expaths[key]
+        return None
 
 class _DiffData:
     def __init__(self, diff_type, lines, file_data, hunks):
@@ -247,13 +310,22 @@ class _DiffData:
         for hunk in self.hunks:
             stats += self._get_hunk_diffstat_stats(hunk)
         return stats
-    def get_file_paths(self, strip_level=0):
+    def get_file_path(self, strip_level=0):
         strip = gen_strip_level_function(strip_level)
-        return _PAIR(strip(self.file_data.before.path), strip(self.file_data.after.path))
-
-ADDED = 'A'
-EXTANT = 'E'
-DELETED = 'D'
+        if isinstance(self.file_data, str):
+            return strip(self.file_data)
+        elif isinstance(self.file_data, _PAIR):
+            return _file_path_fm_pair(self.file_data, strip)
+        else:
+            return None
+    def get_file_path_plus(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        if isinstance(self.file_data, str):
+            return _FILE_PATH_PLUS(path=strip(self.file_data), status=None, expath=None)
+        elif isinstance(self.file_data, _PAIR):
+            return _file_path_plus_fm_pair(self.file_data, strip)
+        else:
+            return None
 
 class FilePatch:
     '''Class to hold patch (headerless) information relavent to a single file.'''
@@ -281,9 +353,18 @@ class FilePatch:
             return _DiffStats()
         return self.diff.get_diffstat_stats()
     def get_file_path(self, strip_level):
-        if not self.diff:
-            return _determine_file_name(_PAIR(None, None), self.preambles)
-        return _determine_file_name(self.diff.get_file_paths(strip_level=strip_level), self.preambles)
+        path = self.diff.get_file_path(strip_level) if self.diff else None
+        if not path:
+            path = _get_file_path_fm_preambles(self.preambles, strip_level=strip_level)
+        return path
+    def get_file_path_plus(self, strip_level):
+        path_plus = self.diff.get_file_path_plus(strip_level) if self.diff else None
+        if not path_plus:
+            path_plus = _get_file_path_plus_fm_preambles(self.preambles, strip_level=strip_level)
+        elif path_plus.status == ADDED and path_plus.expath is None:
+            expath = _get_file_expath_fm_preambles(self.preambles, strip_level=strip_level)
+            path = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
+        return path
 
 class Patch:
     '''Class to hold patch information relavent to multiple files with
@@ -292,6 +373,8 @@ class Patch:
         self.num_strip_levels = int(num_strip_levels)
         self.header = None
         self.file_patches = list()
+    def _adjusted_strip_level(self, strip_level):
+        return int(strip_level) if strip_level is not None else self.num_strip_levels
     def set_strip_level(self, strip_level):
         self.num_strip_levels = int(strip_level)
     def get_header(self):
@@ -325,13 +408,16 @@ class Patch:
             string += file_patch.get_as_string()
         return string
     def get_file_paths(self, strip_level=None):
-        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        strip_level = self._adjusted_strip_level(strip_level)
         return [file_patch.get_file_path(strip_level=strip_level) for file_patch in self.file_patches]
+    def get_file_paths_plus(self, strip_level=None):
+        strip_level = self._adjusted_strip_level(strip_level)
+        return [file_patch.get_file_path_plus(strip_level=strip_level) for file_patch in self.file_patches]
     def get_diffstat_stats(self, strip_level=None):
-        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        strip_level = self._adjusted_strip_level(strip_level)
         return [FILE_DIFF_STATS(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches]
     def fix_trailing_whitespace(self, strip_level=None):
-        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        strip_level = self._adjusted_strip_level(strip_level)
         reports = []
         for file_patch in self.file_patches:
             bad_lines = file_patch.fix_trailing_whitespace()
@@ -340,7 +426,7 @@ class Patch:
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
     def report_trailing_whitespace(self, strip_level=None):
-        strip_level = int(strip_level) if strip_level is not None else self.num_strip_levels
+        strip_level = self._adjusted_strip_level(strip_level)
         reports = []
         for file_patch in self.file_patches:
             bad_lines = file_patch.report_trailing_whitespace()
@@ -372,6 +458,24 @@ GIT_PREAMBLE_EXTRAS_CRES = {
     'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*)%)$'),
 }
 
+class _GitPreamble(_Preamble):
+    def __init__(self, lines, file_data, extras=None):
+        if extras is None:
+            etxras = {}
+        _Preamble.__init__(self, 'git', lines=lines, file_data=file_data,extras=extras)
+    def get_file_path_plus(self, strip_level=0):
+        path_plus = _Preamble.get_file_path_plus(self, strip_level=strip_level)
+        if path_plus and path_plus.status == ADDED:
+            expath = self.get_file_expath(strip_level=strip_level)
+            path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
+        return None
+    def get_file_expath(self, strip_level=0):
+        for key in ['copy from', 'rename from']:
+            if key in self.extras:
+                strip = gen_strip_level_function(strip_level)
+                return strip(self.extras[key])
+        return None
+
 def _get_git_preamble_at(lines, index, raise_if_malformed):
     match = GIT_PREAMBLE_DIFF_CRE.match(lines[index])
     if not match:
@@ -390,7 +494,7 @@ def _get_git_preamble_at(lines, index, raise_if_malformed):
                 found = True
         if not found:
             break
-    return (_Preamble('git', lines[index:next_index], _PAIR(file1, file2), extras), next_index)
+    return (_GitPreamble(lines[index:next_index], _PAIR(file1, file2), extras), next_index)
 # END: git preamble extraction code
 
 # START: diff preamble extraction code
