@@ -199,21 +199,21 @@ def _is_non_null(path):
     return path and path != '/dev/null'
 
 def _file_path_fm_pair(pair, strip=lambda x: x):
-    path = lambda x: x if isinstance(x, str) else x.path
-    after = path(pair.after)
+    get_path = lambda x: x if isinstance(x, str) else x.path
+    after = get_path(pair.after)
     if _is_non_null(after):
         return strip(after)
-    before = path(pair.before)
+    before = get_path(pair.before)
     if _is_non_null(before):
         return strip(before)
     return None
 
-def _file_path_plus_fm_pair(paths, strip=lambda x: x):
-    path = lambda x: x if isinstance(x, str) else x.path
+def _file_path_plus_fm_pair(pair, strip=lambda x: x):
+    get_path = lambda x: x if isinstance(x, str) else x.path
     path = None
     status = None
-    after = path(pair.after)
-    before = path(pair.before)
+    after = get_path(pair.after)
+    before = get_path(pair.before)
     if _is_non_null(after):
         path = strip(after)
         status = EXTANT if _is_non_null(before) else ADDED
@@ -363,8 +363,8 @@ class FilePatch:
             path_plus = _get_file_path_plus_fm_preambles(self.preambles, strip_level=strip_level)
         elif path_plus.status == ADDED and path_plus.expath is None:
             expath = _get_file_expath_fm_preambles(self.preambles, strip_level=strip_level)
-            path = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
-        return path
+            path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
+        return path_plus
 
 class Patch:
     '''Class to hold patch information relavent to multiple files with
