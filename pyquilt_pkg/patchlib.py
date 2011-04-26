@@ -59,7 +59,7 @@ _DIFFSTAT_FMT_DATA = {
     'modified' : '{0} modification{1}(!)',
     'unchanged' : '{0} unchanges line{1}(+)'
 }
-class _DiffStats:
+class _DiffStats(object):
     '''Class to hold diffstat statistics.'''
     def __init__(self):
         self._counts = {}
@@ -140,7 +140,7 @@ DIFFSTAT_FSTATS_CRE = re.compile("^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)
 _BLANK_LINE = re.compile("^\s*$")
 _DIVIDER_LINE = re.compile("^---$")
 
-class _Lines:
+class _Lines(object):
     def __init__(self, contents=None):
         if contents is None:
             self.lines = list()
@@ -156,7 +156,7 @@ class _Lines:
         else:
             self.lines += list(data)
 
-class _Header:
+class _Header(object):
     def __init__(self, text=''):
         lines = text.splitlines(True)
         descr_starts_at = 0
@@ -343,7 +343,7 @@ class _DiffData(_Lines):
         else:
             return None
 
-class FilePatch:
+class FilePatch(object):
     '''Class to hold patch (headerless) information relavent to a single file.'''
     def __init__(self):
         self.preambles = list()
@@ -382,7 +382,7 @@ class FilePatch:
             path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
         return path_plus
 
-class Patch:
+class Patch(object):
     '''Class to hold patch information relavent to multiple files with
     an optional header (or a single file with a header).'''
     def __init__(self, num_strip_levels=0):
