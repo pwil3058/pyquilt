@@ -52,10 +52,10 @@ def get_patch_hdr(path, omit_diffstat=False):
 def get_patch_diff_fm_text(text, file_list=None, strip_level=0):
     obj = patchlib.parse_text(text)
     if not file_list:
-        return ''.join([x.get_as_string() for x in obj.file_patches])
+        return ''.join([str(x) for x in obj.file_patches])
     else:
         num_strip_level = int(strip_level)
-        return ''.join([x.get_as_string() for x in obj.file_patches if x.get_file_path(num_strip_level) in file_list])
+        return ''.join([str(x) for x in obj.file_patches if x.get_file_path(num_strip_level) in file_list])
 
 def get_patch_diff(path, file_list=None, strip_level=0):
     return get_patch_diff_fm_text(fsutils.get_file_contents(path), file_list, strip_level)
@@ -85,7 +85,7 @@ def set_patch_descr(path, text):
     else:
         patch_obj = patchlib.Patch()
     patch_obj.set_description(text)
-    return _write_via_temp(path, patch_obj.get_as_string())
+    return _write_via_temp(path, str(patch_obj))
 
 def set_patch_hdr(path, text, omit_diffstat=False):
     if os.path.exists(path):
@@ -97,7 +97,7 @@ def set_patch_hdr(path, text, omit_diffstat=False):
         dummy.set_diffstat('')
         text = dummy.get_header()
     patch_obj.set_header(text)
-    return _write_via_temp(path, patch_obj.get_as_string())
+    return _write_via_temp(path, str(patch_obj))
 
 def get_patch_files(path, strip_level=1):
     try:
@@ -138,4 +138,4 @@ def remove_trailing_ws(text, strip_level, dry_run=False):
                 errtext += 'Removing trailing whitespace from lines %s of %s\n' % (','.join(bad_lines), filename)
             else:
                 errtext += 'Removing trailing whitespace from line %s of %s\n' % (bad_lines[0], filename)
-        return cmd_result.Result(cmd_result.OK, obj.get_as_string(), errtext)
+        return cmd_result.Result(cmd_result.OK, str(obj), errtext)

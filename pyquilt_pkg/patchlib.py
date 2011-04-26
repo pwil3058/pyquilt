@@ -140,6 +140,22 @@ DIFFSTAT_FSTATS_CRE = re.compile("^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)
 _BLANK_LINE = re.compile("^\s*$")
 _DIVIDER_LINE = re.compile("^---$")
 
+class _Lines:
+    def __init__(self, contents=None):
+        if contents is None:
+            self.lines = list()
+        elif isinstance(contents, str):
+            self.lines = contents.splitlines(True)
+        else:
+            self.lines = list(contents)
+    def __str__(self):
+        return ''.join(self.lines)
+    def append(self, data):
+        if isinstance(data, str):
+            self.lines += data.splitlines(True)
+        else:
+            self.lines += list(data)
+
 class _Header:
     def __init__(self, text=''):
         lines = text.splitlines(True)
@@ -148,7 +164,7 @@ class _Header:
             if not line.startswith('#'):
                 break
             descr_starts_at += 1
-        self.comment_lines = lines[:descr_starts_at]
+        self.comment_lines = _Lines(lines[:descr_starts_at])
         diffstat_starts_at = None
         index = descr_starts_at
         while index < len(lines):
@@ -171,25 +187,25 @@ class _Header:
                 diffstat_starts_at = None
             index += 1
         if diffstat_starts_at is not None:
-            self.description_lines = lines[descr_starts_at:diffstat_starts_at]
-            self.diffstat_lines = lines[diffstat_starts_at:]
+            self.description_lines = _Lines(lines[descr_starts_at:diffstat_starts_at])
+            self.diffstat_lines = _Lines(lines[diffstat_starts_at:])
         else:
-            self.description_lines = lines[descr_starts_at:]
-            self.diffstat_lines = []
-    def get_as_string(self):
+            self.description_lines = _Lines(lines[descr_starts_at:])
+            self.diffstat_lines = _Lines()
+    def __str__(self):
         return self.get_comments() + self.get_description() + self.get_diffstat()
     def get_comments(self):
-        return ''.join(self.comment_lines)
+        return str(self.comment_lines)
     def get_description(self):
-        return ''.join(self.description_lines)
+        return str(self.description_lines)
     def get_diffstat(self):
-        return ''.join(self.diffstat_lines)
+        return str(self.diffstat_lines)
     def set_comments(self, text):
-        self.comment_lines = text.splitlines(True)
+        self.comment_lines = _Lines(text)
     def set_description(self, text):
-        self.description_lines = text.splitlines(True)
+        self.description_lines = _Lines(text)
     def set_diffstat(self, text):
-        self.diffstat_lines = text.splitlines(True)
+        self.diffstat_lines = _Lines(text)
 
 ADDED = 'A'
 EXTANT = 'E'
@@ -224,10 +240,10 @@ def _file_path_plus_fm_pair(pair, strip=lambda x: x):
         return None
     return _FILE_PATH_PLUS(path=path, status=status, expath=None)
 
-class _Preamble:
+class _Preamble(_Lines):
     def __init__(self, preamble_type, lines, file_data, extras=None):
+        _Lines.__init__(self, lines)
         self.preamble_type = preamble_type
-        self.lines = lines
         self.file_data = file_data
         self.extras = extras
     def get_file_path(self, strip_level=0):
@@ -285,10 +301,10 @@ def _get_file_expath_fm_preambles(preambles, strip_level=0):
                 return expaths[key]
         return None
 
-class _DiffData:
+class _DiffData(_Lines):
     def __init__(self, diff_type, lines, file_data, hunks):
+        _Lines.__init__(self, lines)
         self.diff_type = diff_type
-        self.lines = lines
         self.file_data = file_data
         self.hunks = hunks
     def _process_hunk_tws(self, hunk, fix=False):
@@ -332,13 +348,13 @@ class FilePatch:
     def __init__(self):
         self.preambles = list()
         self.diff = None
-        self.trailing_junk = list()
-    def get_as_string(self):
+        self.trailing_junk = _Lines()
+    def __str__(self):
         string = ''
         for pream in self.preambles:
-            string += ''.join(pream.lines)
-        string += ''.join(self.diff.lines)
-        string += ''.join(self.trailing_junk)
+            string += str(pream)
+        string += str(self.diff)
+        string += str(self.trailing_junk)
         return string
     def fix_trailing_whitespace(self):
         if self.diff is None:
@@ -378,7 +394,7 @@ class Patch:
     def set_strip_level(self, strip_level):
         self.num_strip_levels = int(strip_level)
     def get_header(self):
-        return '' if self.header is None else self.header.get_as_string()
+        return '' if self.header is None else str(self.header)
     def set_header(self, text):
         self.header = _Header(text)
     def get_comments(self):
@@ -402,10 +418,10 @@ class Patch:
             self.header = _Header(text)
         else:
             self.header.set_diffstat(text)
-    def get_as_string(self):
+    def __str__(self):
         string = self.get_header()
         for file_patch in self.file_patches:
-            string += file_patch.get_as_string()
+            string += str(file_patch)
         return string
     def get_file_paths(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
@@ -717,7 +733,7 @@ def _get_cdiff_hunk_at(lines, index, cdiff_start_index):
 
 class _CDiffData(_DiffData):
     def __init__(self, lines, file_data, hunks):
-        _DiffData.__init__(self, 'u', lines, file_data, hunks)
+        _DiffData.__init__(self, 'context', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
         bad_lines = list()
         for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):

@@ -59,9 +59,9 @@ if ARGS.opt_dry_run:
 else:
     reports = patch.fix_trailing_whitespace(strip_level=1)
     if not ARGS.arg_patch_file:
-        sys.stdout.write(patch.get_as_string())
+        sys.stdout.write(str(patch))
     else:
-        open(ARGS.arg_patch_file, 'w').write(patch.get_as_string())
+        open(ARGS.arg_patch_file, 'w').write(str(patch))
     for filename, bad_lines in reports:
         if len(bad_lines) > 1:
             sys.stderr.write('Removing trailing whitespace from lines %s of %s\n' % (','.join(bad_lines), filename))
