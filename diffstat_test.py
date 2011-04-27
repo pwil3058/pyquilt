@@ -39,7 +39,7 @@ PARSER.add_argument(
 ARGS = PARSER.parse_args()
 
 # This will keep track of the order in which files were discovered
-stats_list = patchlib.DiffStatList()
+stats_list = patchlib.DiffStatsList()
 
 def process_text(text, strip_level=1):
     for stat in patchlib.parse_text(text).get_diffstat_stats(strip_level):

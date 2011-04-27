@@ -28,6 +28,12 @@ _FILE_AND_TWS_LINES = collections.namedtuple('_FILE_AND_TWS_LINES', ['path', 'tw
 _DIFF_DATA = collections.namedtuple('_DIFF_DATA', ['file_data', 'hunks',])
 _FILE_PATH_PLUS = collections.namedtuple('_FILE_PATH_PLUS', ['path', 'status', 'expath'])
 
+# Useful strings for including in regular expressions
+_PATH_RE_STR = '"([^"]+)"|(\S+)'
+_TIMESTAMP_RE_STR = '\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{9})? [-+]{1}\d{4}'
+_ALT_TIMESTAMP_RE_STR = '[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4}'
+_EITHER_TS_RE_STR = '(%s|%s)' % (_TIMESTAMP_RE_STR, _ALT_TIMESTAMP_RE_STR)
+
 class ParseError(Exception):
     def __init__(self, message, lineno=None):
         self.message = message
@@ -121,7 +127,7 @@ class PathDiffStats(object):
             self.diff_stats += other
         return self
 
-class DiffStatList(list):
+class DiffStatsList(list):
     def __contains__(self, item):
         if isinstance(item, PathDiffStats):
             return list.__contains__(self, item)
@@ -460,7 +466,7 @@ class Patch(object):
         return [file_patch.get_file_path_plus(strip_level=strip_level) for file_patch in self.file_patches]
     def get_diffstat_stats(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
-        return DiffStatList([PathDiffStats(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches])
+        return DiffStatsList([PathDiffStats(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches])
     def fix_trailing_whitespace(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
         reports = []
@@ -479,12 +485,6 @@ class Patch(object):
                 path = file_patch.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
-
-# Useful strings for including in regular expressions
-_PATH_RE_STR = '"([^"]+)"|(\S+)'
-_TIMESTAMP_RE_STR = '\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{9})? [-+]{1}\d{4}'
-_ALT_TIMESTAMP_RE_STR = '[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4}'
-_EITHER_TS_RE_STR = '(%s|%s)' % (_TIMESTAMP_RE_STR, _ALT_TIMESTAMP_RE_STR)
 
 # START: preamble extraction code
 class GitPreamble(Preamble):
