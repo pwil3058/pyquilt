@@ -52,30 +52,30 @@ def _trim_trailing_ws(line):
     '''Return the given line with any trailing white space removed'''
     return re.sub('[ \t]+$', '', line)
 
-_ORDERED_DIFFSTAT_KEYS = ['inserted', 'deleted', 'modified', 'unchanged']
-_DIFFSTAT_FMT_DATA = {
-    'inserted' : '{0} insertion{1}(+)',
-    'deleted' : '{0} deletion{1}(-)',
-    'modified' : '{0} modification{1}(!)',
-    'unchanged' : '{0} unchanges line{1}(+)'
-}
 class _DiffStats(object):
     '''Class to hold diffstat statistics.'''
+    _ORDERED_KEYS = ['inserted', 'deleted', 'modified', 'unchanged']
+    _FMT_DATA = {
+        'inserted' : '{0} insertion{1}(+)',
+        'deleted' : '{0} deletion{1}(-)',
+        'modified' : '{0} modification{1}(!)',
+        'unchanged' : '{0} unchanges line{1}(+)'
+    }
     def __init__(self):
         self._counts = {}
-        for key in _ORDERED_DIFFSTAT_KEYS:
+        for key in _DiffStats._ORDERED_KEYS:
             self._counts[key] = 0
-        assert len(self._counts) == len(_ORDERED_DIFFSTAT_KEYS)
+        assert len(self._counts) == len(_DiffStats._ORDERED_KEYS)
     def __add__(self, other):
         result = _DiffStats()
-        for key in _ORDERED_DIFFSTAT_KEYS:
+        for key in _DiffStats._ORDERED_KEYS:
             result._counts[key] = self._counts[key] + other._counts[key]
         return result
     def __len__(self):
         return len(self._counts)
     def __getitem__(self, key):
         if isinstance(key, int):
-            key = _ORDERED_DIFFSTAT_KEYS[key]
+            key = _DiffStats._ORDERED_KEYS[key]
         return self._counts[key]
     def get_total(self):
         return sum(list(self))
@@ -86,19 +86,19 @@ class _DiffStats(object):
         return self._counts[key]
     def as_string(self, joiner=', ', prefix=', '):
         strings = []
-        for key in _ORDERED_DIFFSTAT_KEYS:
+        for key in _DiffStats._ORDERED_KEYS:
             num = self._counts[key]
             if num:
-                strings.append(_DIFFSTAT_FMT_DATA[key].format(num, '' if num == 1 else 's'))
+                strings.append(_DiffStats._FMT_DATA[key].format(num, '' if num == 1 else 's'))
         if strings:
             return prefix + joiner.join(strings)
         else:
             return ''
     def as_bar(self, scale=lambda x: x):
         string = ''
-        for key in _ORDERED_DIFFSTAT_KEYS:
+        for key in _DiffStats._ORDERED_KEYS:
             count = scale(self._counts[key])
-            char = _DIFFSTAT_FMT_DATA[key][-2]
+            char = _DiffStats._FMT_DATA[key][-2]
             string += char * count
         return string
 
