@@ -26,7 +26,6 @@ _PAIR = collections.namedtuple('_PAIR', ['before', 'after',])
 _FILE_AND_TS = collections.namedtuple('_FILE_AND_TS', ['path', 'timestamp',])
 _FILE_AND_TWS_LINES = collections.namedtuple('_FILE_AND_TWS_LINES', ['path', 'tws_lines',])
 _DIFF_DATA = collections.namedtuple('_DIFF_DATA', ['file_data', 'hunks',])
-FILE_DIFF_STATS = collections.namedtuple('FILE_DIFF_STATS', ['path', 'diff_stats'])
 _FILE_PATH_PLUS = collections.namedtuple('_FILE_PATH_PLUS', ['path', 'status', 'expath'])
 
 class ParseError(Exception):
@@ -52,7 +51,7 @@ def _trim_trailing_ws(line):
     '''Return the given line with any trailing white space removed'''
     return re.sub('[ \t]+$', '', line)
 
-class _DiffStats(object):
+class DiffStats(object):
     '''Class to hold diffstat statistics.'''
     _ORDERED_KEYS = ['inserted', 'deleted', 'modified', 'unchanged']
     _FMT_DATA = {
@@ -63,19 +62,19 @@ class _DiffStats(object):
     }
     def __init__(self):
         self._counts = {}
-        for key in _DiffStats._ORDERED_KEYS:
+        for key in DiffStats._ORDERED_KEYS:
             self._counts[key] = 0
-        assert len(self._counts) == len(_DiffStats._ORDERED_KEYS)
+        assert len(self._counts) == len(DiffStats._ORDERED_KEYS)
     def __add__(self, other):
-        result = _DiffStats()
-        for key in _DiffStats._ORDERED_KEYS:
+        result = DiffStats()
+        for key in DiffStats._ORDERED_KEYS:
             result._counts[key] = self._counts[key] + other._counts[key]
         return result
     def __len__(self):
         return len(self._counts)
     def __getitem__(self, key):
         if isinstance(key, int):
-            key = _DiffStats._ORDERED_KEYS[key]
+            key = DiffStats._ORDERED_KEYS[key]
         return self._counts[key]
     def get_total(self):
         return sum(list(self))
@@ -86,53 +85,81 @@ class _DiffStats(object):
         return self._counts[key]
     def as_string(self, joiner=', ', prefix=', '):
         strings = []
-        for key in _DiffStats._ORDERED_KEYS:
+        for key in DiffStats._ORDERED_KEYS:
             num = self._counts[key]
             if num:
-                strings.append(_DiffStats._FMT_DATA[key].format(num, '' if num == 1 else 's'))
+                strings.append(DiffStats._FMT_DATA[key].format(num, '' if num == 1 else 's'))
         if strings:
             return prefix + joiner.join(strings)
         else:
             return ''
     def as_bar(self, scale=lambda x: x):
         string = ''
-        for key in _DiffStats._ORDERED_KEYS:
+        for key in DiffStats._ORDERED_KEYS:
             count = scale(self._counts[key])
-            char = _DiffStats._FMT_DATA[key][-2]
+            char = DiffStats._FMT_DATA[key][-2]
             string += char * count
         return string
 
-def list_format_diff_stats(stats_list, quiet=False, comment=False, trim_names=False, max_width=80):
-    if len(stats_list) == 0 and quiet:
-        return ''
-    string = ''
-    if trim_names:
-        common_path = get_common_path([x.path for x in stats_list])
-        offset = len(common_path)
-    else:
-        offset = 0
-    len_longest_name = max([len(x.path) for x in stats_list]) - offset
-    fstr = '%s {0}{1} |{2:5} {3}\n' % ('#' if comment else '')
-    largest_total = max(max([x.diff_stats.get_total() for x in stats_list]), 1)
-    avail_width = max(0, max_width - (len_longest_name + 9))
-    if comment:
-        avail_width -= 1
-    scale = lambda x: (x * avail_width) / largest_total
-    summation = _DiffStats()
-    for stats in stats_list:
-        summation += stats.diff_stats
-        total = stats.diff_stats.get_total()
-        name = stats.path[offset:]
-        spaces = ' ' * (len_longest_name - len(name))
-        string += fstr.format(name, spaces, total, stats.diff_stats.as_bar(scale))
-    num_files = len(stats_list)
-    if num_files > 0 or not quiet:
+class PathDiffStats(object):
+    def __init__(self, path, diff_stats):
+        self.path = path
+        self.diff_stats = diff_stats
+    def __eq__(self, other): return self.path == other.path
+    def __ne__(self, other): return self.path != other.path
+    def __lt__(self, other): return self.path < other.path
+    def __gt__(self, other): return self.path > other.path
+    def __le__(self, other): return self.path <= other.path
+    def __ge__(self, other): return self.path >= other.path
+    def __iadd__(self, other):
+        if isinstance(other, PathDiffStats):
+            if other.path != self.path:
+                raise
+            else:
+                self.diff_stats += other.diff_stats
+        else:
+            self.diff_stats += other
+        return self
+
+class DiffStatList(list):
+    def __contains__(self, item):
+        if isinstance(item, PathDiffStats):
+            return list.__contains__(self, item)
+        for pstat in self:
+            if pstat.path == item:
+                return True
+        return False
+    def list_format_string(self, quiet=False, comment=False, trim_names=False, max_width=80):
+        if len(self) == 0 and quiet:
+            return ''
+        string = ''
+        if trim_names:
+            common_path = get_common_path([x.path for x in self])
+            offset = len(common_path)
+        else:
+            offset = 0
+        len_longest_name = max([len(x.path) for x in self]) - offset
+        fstr = '%s {0}{1} |{2:5} {3}\n' % ('#' if comment else '')
+        largest_total = max(max([x.diff_stats.get_total() for x in self]), 1)
+        avail_width = max(0, max_width - (len_longest_name + 9))
         if comment:
-            string += '#'
-        string += ' {0} file{1} changed'.format(num_files, '' if num_files == 1 else 's')
-        string += summation.as_string()
-        string += '\n'
-    return string
+            avail_width -= 1
+        scale = lambda x: (x * avail_width) / largest_total
+        summation = DiffStats()
+        for stats in self:
+            summation += stats.diff_stats
+            total = stats.diff_stats.get_total()
+            name = stats.path[offset:]
+            spaces = ' ' * (len_longest_name - len(name))
+            string += fstr.format(name, spaces, total, stats.diff_stats.as_bar(scale))
+        num_files = len(self)
+        if num_files > 0 or not quiet:
+            if comment:
+                string += '#'
+            string += ' {0} file{1} changed'.format(num_files, '' if num_files == 1 else 's')
+            string += summation.as_string()
+            string += '\n'
+        return string
 
 DIFFSTAT_EMPTY_CRE = re.compile("^#? 0 files changed$")
 DIFFSTAT_END_CRE = re.compile("^#? (\d+) files? changed(, (\d+) insertions?\(\+\))?(, (\d+) deletions?\(-\))?(, (\d+) modifications?\(\!\))?$")
@@ -310,7 +337,7 @@ class _DiffData(_Lines):
     def _process_hunk_tws(self, hunk, fix=False):
         return list()
     def _get_hunk_diffstat_stats(self, hunk):
-        return _DiffStats()
+        return DiffStats()
     def fix_trailing_whitespace(self):
         bad_lines = list()
         for hunk in self.hunks:
@@ -322,7 +349,7 @@ class _DiffData(_Lines):
             bad_lines += self._process_hunk_tws(hunk, fix=False)
         return bad_lines
     def get_diffstat_stats(self):
-        stats = _DiffStats()
+        stats = DiffStats()
         for hunk in self.hunks:
             stats += self._get_hunk_diffstat_stats(hunk)
         return stats
@@ -366,7 +393,7 @@ class FilePatch(object):
         return self.diff.report_trailing_whitespace()
     def get_diffstat_stats(self):
         if self.diff is None:
-            return _DiffStats()
+            return DiffStats()
         return self.diff.get_diffstat_stats()
     def get_file_path(self, strip_level):
         path = self.diff.get_file_path(strip_level) if self.diff else None
@@ -431,7 +458,7 @@ class Patch(object):
         return [file_patch.get_file_path_plus(strip_level=strip_level) for file_patch in self.file_patches]
     def get_diffstat_stats(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
-        return [FILE_DIFF_STATS(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches]
+        return DiffStatList([PathDiffStats(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches])
     def fix_trailing_whitespace(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
         reports = []
@@ -615,7 +642,7 @@ class _UDiffData(_DiffData):
                 raise Bug('Unexpected end of unified diff hunk.')
         return bad_lines
     def _get_hunk_diffstat_stats(self, hunk):
-        stats = _DiffStats()
+        stats = DiffStats()
         for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
             if self.lines[index].startswith('-'):
                 stats.incr('deleted')
@@ -748,7 +775,7 @@ class _CDiffData(_DiffData):
                 raise Bug('Unexpected end of context diff hunk.')
         return bad_lines
     def _get_hunk_diffstat_stats(self, hunk):
-        stats = _DiffStats()
+        stats = DiffStats()
         for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
             if self.lines[index].startswith('- '):
                 stats.incr('deleted')

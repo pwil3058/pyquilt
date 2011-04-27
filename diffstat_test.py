@@ -38,17 +38,15 @@ PARSER.add_argument(
 
 ARGS = PARSER.parse_args()
 
-# Keep track of the order in which files were discovered
-ORDERED_FILE_LIST = []
-FILE_MAP = {}
+# This will keep track of the order in which files were discovered
+stats_list = patchlib.DiffStatList()
 
 def process_text(text, strip_level=1):
     for stat in patchlib.parse_text(text).get_diffstat_stats(strip_level):
-        if not stat.path in ORDERED_FILE_LIST:
-            ORDERED_FILE_LIST.append(stat.path)
-            FILE_MAP[stat.path] = stat.diff_stats
+        if stat not in stats_list:
+            stats_list.append(stat)
         else:
-            FILE_MAP[stat.path] += stat.diff_stats
+            stats_list[stats_list.index(stat)] += stat.diff_stats
 
 if len(ARGS.arg_patch_list) == 0:
     try:
@@ -71,14 +69,7 @@ else:
             print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno, 'FILE:', patch_filename
             sys.exit(1)
 
-# Sanity check
-assert len(ORDERED_FILE_LIST) == len(FILE_MAP)
+if not ARGS.opt_unsorted:
+    stats_list.sort()
 
-if ARGS.opt_unsorted:
-    # Put the data into a list in the order in which files were encountered
-    STATS_LIST = [patchlib.FILE_DIFF_STATS(path, FILE_MAP[path]) for path in ORDERED_FILE_LIST]
-else:
-    # Put them in alphabetical order
-    STATS_LIST = [patchlib.FILE_DIFF_STATS(path, FILE_MAP[path]) for path in sorted(ORDERED_FILE_LIST)]
-
-print patchlib.list_format_diff_stats(STATS_LIST),
+print stats_list.list_format_string(),

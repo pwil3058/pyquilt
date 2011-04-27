@@ -57,4 +57,4 @@ def get_diffstat(text, strip_level, quiet=True):
         output.error('diffstat default options: %; ignored\n' % ' '.join(leftovers))
     obj = patchlib.parse_text(text)
     stats_list = obj.get_diffstat_stats(int(strip_level))
-    return patchlib.list_format_diff_stats(stats_list, quiet=args.opt_quiet, comment=args.opt_comment, max_width=int(args.opt_max_width))
+    return stats_list.list_format_string(quiet=args.opt_quiet, comment=args.opt_comment, max_width=int(args.opt_max_width))
