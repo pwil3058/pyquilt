@@ -300,6 +300,101 @@ class Preamble(_Lines):
     def get_file_expath(self, strip_level=0):
         return None
 
+class GitPreamble(Preamble):
+    DIFF_CRE = re.compile("^diff\s+--git\s+({0})\s+({1})$".format(_PATH_RE_STR, _PATH_RE_STR))
+    EXTRAS_CRES = {
+        'old mode' : re.compile('^(old mode)\s+(\d*)$'),
+        'new mode' : re.compile('^(new mode)\s+(\d*)$'),
+        'deleted file mode' : re.compile('^(deleted file mode)\s+(\d*)$'),
+        'new file mode' :  re.compile('^(new file mode)\s+(\d*)$'),
+        'copy from' : re.compile('^(copy from)\s+({0})$'.format(_PATH_RE_STR)),
+        'copy to' : re.compile('^(copy to)\s+({0})$'.format(_PATH_RE_STR)),
+        'rename from' : re.compile('^(rename from)\s+({0})$'.format(_PATH_RE_STR)),
+        'rename to' : re.compile('^(rename to)\s+({0})$'.format(_PATH_RE_STR)),
+        'similarity index' : re.compile('^(similarity index)\s+((\d*)%)$'),
+        'dissimilarity index' : re.compile('^(dissimilarity index)\s+((\d*)%)$'),
+        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*)%)$'),
+    }
+    @staticmethod
+    def get_preamble_at(lines, index, raise_if_malformed):
+        match = GitPreamble.DIFF_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        file1 = match.group(3) if match.group(3) else match.group(4)
+        file2 = match.group(6) if match.group(6) else match.group(7)
+        extras = {}
+        next_index = index + 1
+        while next_index < len(lines):
+            found = False
+            for cre in GitPreamble.EXTRAS_CRES:
+                match = GitPreamble.EXTRAS_CRES[cre].match(lines[next_index])
+                if match:
+                    extras[match.group(1)] = match.group(2)
+                    next_index += 1
+                    found = True
+            if not found:
+                break
+        return (GitPreamble(lines[index:next_index], _PAIR(file1, file2), extras), next_index)
+    def __init__(self, lines, file_data, extras=None):
+        if extras is None:
+            etxras = {}
+        Preamble.__init__(self, 'git', lines=lines, file_data=file_data,extras=extras)
+    def get_file_path(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        return _file_path_fm_pair(self.file_data, strip)
+    def get_file_path_plus(self, strip_level=0):
+        path_plus = Preamble.get_file_path_plus(self, strip_level=strip_level)
+        if path_plus and path_plus.status == ADDED:
+            expath = self.get_file_expath(strip_level=strip_level)
+            path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
+        return None
+    def get_file_expath(self, strip_level=0):
+        for key in ['copy from', 'rename from']:
+            if key in self.extras:
+                strip = gen_strip_level_function(strip_level)
+                return strip(self.extras[key])
+        return None
+
+Preamble.subtypes.append(GitPreamble)
+
+class DiffPreamble(Preamble):
+    CRE = re.compile('^diff(\s.+)\s+({0})\s+({1})$'.format(_PATH_RE_STR, _PATH_RE_STR))
+    @staticmethod
+    def get_preamble_at(lines, index, raise_if_malformed):
+        match = DiffPreamble.CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        file1 = match.group(3) if match.group(3) else match.group(4)
+        file2 = match.group(6) if match.group(6) else match.group(7)
+        next_index = index + 1
+        return (Preamble('diff', lines[index:next_index], _PAIR(file1, file2), match.group(1)), next_index)
+    def __init__(self, lines, file_data, extras=None):
+        Preamble.__init__(self, 'diff', lines=lines, file_data=file_data,extras=extras)
+    def get_file_path(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        return _file_path_fm_pair(self.file_data, strip)
+
+Preamble.subtypes.append(DiffPreamble)
+
+class IndexPreamble(Preamble):
+    FILE_RCE = re.compile("^Index:\s+({0})(.*)$".format(_PATH_RE_STR))
+    SEP_RCE = re.compile("^==*$")
+    @staticmethod
+    def get_preamble_at(lines, index, raise_if_malformed):
+        match = IndexPreamble.FILE_RCE.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        next_index = index + (2 if (index + 1) < len(lines) and IndexPreamble.SEP_RCE.match(lines[index + 1]) else 1)
+        return (Preamble('index', lines[index:next_index], filename), next_index)
+    def __init__(self, lines, file_data, extras=None):
+        Preamble.__init__(self, 'index', lines=lines, file_data=file_data, extras=extras)
+    def get_file_path(self, strip_level=0):
+        strip = gen_strip_level_function(strip_level)
+        return strip(self.file_data)
+
+Preamble.subtypes.append(IndexPreamble)
+
 def _get_file_path_fm_preambles(preambles, strip_level=0):
         paths = {}
         for preamble in preambles:
@@ -485,103 +580,6 @@ class Patch(object):
                 path = file_patch.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
-
-# START: preamble extraction code
-class GitPreamble(Preamble):
-    DIFF_CRE = re.compile("^diff\s+--git\s+({0})\s+({1})$".format(_PATH_RE_STR, _PATH_RE_STR))
-    EXTRAS_CRES = {
-        'old mode' : re.compile('^(old mode)\s+(\d*)$'),
-        'new mode' : re.compile('^(new mode)\s+(\d*)$'),
-        'deleted file mode' : re.compile('^(deleted file mode)\s+(\d*)$'),
-        'new file mode' :  re.compile('^(new file mode)\s+(\d*)$'),
-        'copy from' : re.compile('^(copy from)\s+({0})$'.format(_PATH_RE_STR)),
-        'copy to' : re.compile('^(copy to)\s+({0})$'.format(_PATH_RE_STR)),
-        'rename from' : re.compile('^(rename from)\s+({0})$'.format(_PATH_RE_STR)),
-        'rename to' : re.compile('^(rename to)\s+({0})$'.format(_PATH_RE_STR)),
-        'similarity index' : re.compile('^(similarity index)\s+((\d*)%)$'),
-        'dissimilarity index' : re.compile('^(dissimilarity index)\s+((\d*)%)$'),
-        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*)%)$'),
-    }
-    @staticmethod
-    def get_preamble_at(lines, index, raise_if_malformed):
-        match = GitPreamble.DIFF_CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        file1 = match.group(3) if match.group(3) else match.group(4)
-        file2 = match.group(6) if match.group(6) else match.group(7)
-        extras = {}
-        next_index = index + 1
-        while next_index < len(lines):
-            found = False
-            for cre in GitPreamble.EXTRAS_CRES:
-                match = GitPreamble.EXTRAS_CRES[cre].match(lines[next_index])
-                if match:
-                    extras[match.group(1)] = match.group(2)
-                    next_index += 1
-                    found = True
-            if not found:
-                break
-        return (GitPreamble(lines[index:next_index], _PAIR(file1, file2), extras), next_index)
-    def __init__(self, lines, file_data, extras=None):
-        if extras is None:
-            etxras = {}
-        Preamble.__init__(self, 'git', lines=lines, file_data=file_data,extras=extras)
-    def get_file_path(self, strip_level=0):
-        strip = gen_strip_level_function(strip_level)
-        return _file_path_fm_pair(self.file_data, strip)
-    def get_file_path_plus(self, strip_level=0):
-        path_plus = Preamble.get_file_path_plus(self, strip_level=strip_level)
-        if path_plus and path_plus.status == ADDED:
-            expath = self.get_file_expath(strip_level=strip_level)
-            path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
-        return None
-    def get_file_expath(self, strip_level=0):
-        for key in ['copy from', 'rename from']:
-            if key in self.extras:
-                strip = gen_strip_level_function(strip_level)
-                return strip(self.extras[key])
-        return None
-
-Preamble.subtypes.append(GitPreamble)
-
-class DiffPreamble(Preamble):
-    CRE = re.compile('^diff(\s.+)\s+({0})\s+({1})$'.format(_PATH_RE_STR, _PATH_RE_STR))
-    @staticmethod
-    def get_preamble_at(lines, index, raise_if_malformed):
-        match = DiffPreamble.CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        file1 = match.group(3) if match.group(3) else match.group(4)
-        file2 = match.group(6) if match.group(6) else match.group(7)
-        next_index = index + 1
-        return (Preamble('diff', lines[index:next_index], _PAIR(file1, file2), match.group(1)), next_index)
-    def __init__(self, lines, file_data, extras=None):
-        Preamble.__init__(self, 'diff', lines=lines, file_data=file_data,extras=extras)
-    def get_file_path(self, strip_level=0):
-        strip = gen_strip_level_function(strip_level)
-        return _file_path_fm_pair(self.file_data, strip)
-
-Preamble.subtypes.append(DiffPreamble)
-
-class IndexPreamble(Preamble):
-    FILE_RCE = re.compile("^Index:\s+({0})(.*)$".format(_PATH_RE_STR))
-    SEP_RCE = re.compile("^==*$")
-    @staticmethod
-    def get_preamble_at(lines, index, raise_if_malformed):
-        match = IndexPreamble.FILE_RCE.match(lines[index])
-        if not match:
-            return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        next_index = index + (2 if (index + 1) < len(lines) and IndexPreamble.SEP_RCE.match(lines[index + 1]) else 1)
-        return (Preamble('index', lines[index:next_index], filename), next_index)
-    def __init__(self, lines, file_data, extras=None):
-        Preamble.__init__(self, 'index', lines=lines, file_data=file_data, extras=extras)
-    def get_file_path(self, strip_level=0):
-        strip = gen_strip_level_function(strip_level)
-        return strip(self.file_data)
-
-Preamble.subtypes.append(IndexPreamble)
-# END: preamble extraction code
 
 # START: diff extraction code
 # START: Unified Diff Format specific code
