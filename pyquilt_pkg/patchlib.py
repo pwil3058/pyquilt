@@ -367,7 +367,7 @@ class DiffPreamble(Preamble):
         file1 = match.group(3) if match.group(3) else match.group(4)
         file2 = match.group(6) if match.group(6) else match.group(7)
         next_index = index + 1
-        return (Preamble('diff', lines[index:next_index], _PAIR(file1, file2), match.group(1)), next_index)
+        return (DiffPreamble(lines[index:next_index], _PAIR(file1, file2), match.group(1)), next_index)
     def __init__(self, lines, file_data, extras=None):
         Preamble.__init__(self, 'diff', lines=lines, file_data=file_data,extras=extras)
     def get_file_path(self, strip_level=0):
@@ -386,7 +386,7 @@ class IndexPreamble(Preamble):
             return (None, index)
         filename = match.group(2) if match.group(2) else match.group(3)
         next_index = index + (2 if (index + 1) < len(lines) and IndexPreamble.SEP_RCE.match(lines[index + 1]) else 1)
-        return (Preamble('index', lines[index:next_index], filename), next_index)
+        return (IndexPreamble(lines[index:next_index], filename), next_index)
     def __init__(self, lines, file_data, extras=None):
         Preamble.__init__(self, 'index', lines=lines, file_data=file_data, extras=extras)
     def get_file_path(self, strip_level=0):
@@ -395,38 +395,53 @@ class IndexPreamble(Preamble):
 
 Preamble.subtypes.append(IndexPreamble)
 
-def _get_file_path_fm_preambles(preambles, strip_level=0):
+class Preambles(list):
+    path_precedence = ['index', 'git', 'diff']
+    expath_precedence = ['git', 'index', 'diff']
+    @staticmethod
+    def get_preambles_at(lines, index, raise_if_malformed):
+        preambles = Preambles()
+        while index < len(lines):
+            preamble, index = Preamble.get_preamble_at(lines, index, raise_if_malformed)
+            if preamble:
+                preambles.append(preamble)
+            else:
+                break
+        return (preambles, index)
+    def get_types(self):
+        return [item.preamble_type for item in self]
+    def get_index_for_type(self, preamble_type):
+        for index in range(len(self)):
+            if self[index].preamble_type == preamble_type:
+                return index
+        return None
+    def get_file_path(self, strip_level=0):
         paths = {}
-        for preamble in preambles:
+        for preamble in self:
             path = preamble.get_file_path(strip_level=strip_level)
             if path:
                 paths[preamble.preamble_type] = path
-        # Key order indicates data source precedence
-        for key in ['index', 'git', 'diff']:
+        for key in Preambles.path_precedence:
             if key in paths:
                 return paths[key]
         return None
-
-def _get_file_path_plus_fm_preambles(preambles, strip_level=0):
+    def get_file_path_plus(self, strip_level=0):
         paths_plus = {}
-        for preamble in preambles:
+        for preamble in self:
             path_plus = preamble.get_file_path_plus(strip_level=strip_level)
             if path_plus:
                 paths_plus[preamble.preamble_type] = path_plus
-        # Key order indicates data source precedence
-        for key in ['git', 'index', 'diff']:
+        for key in Preambles.expath_precedence:
             if key in paths_plus:
                 return paths_plus[key]
         return None
-
-def _get_file_expath_fm_preambles(preambles, strip_level=0):
+    def get_file_expath(self, strip_level=0):
         expaths = {}
-        for preamble in preambles:
+        for preamble in self:
             expath = preamble.get_file_expath(strip_level=strip_level)
             if expath:
                 expaths[preamble.preamble_type] = expath
-        # Key order indicates data source precedence
-        for key in ['git', 'index', 'diff']:
+        for key in Preambles.expath_precedence:
             if key in expaths:
                 return expaths[key]
         return None
@@ -476,7 +491,7 @@ class _DiffData(_Lines):
 class FilePatch(object):
     '''Class to hold patch (headerless) information relavent to a single file.'''
     def __init__(self):
-        self.preambles = list()
+        self.preambles = Preambles()
         self.diff = None
         self.trailing_junk = _Lines()
     def __str__(self):
@@ -501,14 +516,14 @@ class FilePatch(object):
     def get_file_path(self, strip_level):
         path = self.diff.get_file_path(strip_level) if self.diff else None
         if not path:
-            path = _get_file_path_fm_preambles(self.preambles, strip_level=strip_level)
+            path = self.preambles.get_file_path(strip_level=strip_level)
         return path
     def get_file_path_plus(self, strip_level):
         path_plus = self.diff.get_file_path_plus(strip_level) if self.diff else None
         if not path_plus:
-            path_plus = _get_file_path_plus_fm_preambles(self.preambles, strip_level=strip_level)
+            path_plus = self.preambles.get_file_path_plus(strip_level=strip_level)
         elif path_plus.status == ADDED and path_plus.expath is None:
-            expath = _get_file_expath_fm_preambles(self.preambles, strip_level=strip_level)
+            expath = self.preambles.get_file_expath(strip_level=strip_level)
             path_plus = _FILE_PATH_PLUS(path=path_plus.path, status=path_plus.status, expath=expath)
         return path_plus
 
@@ -844,11 +859,10 @@ def parse_lines(lines, simplify=False):
     while index < len(lines):
         raise_if_malformed = diff_starts_at is not None
         starts_at = index
-        preambles = list()
-        while index < len(lines):
-            preamble, index = Preamble.get_preamble_at(lines, index, raise_if_malformed)
-            if preamble:
-                preambles.append(preamble)
+        preambles, index = Preambles.get_preambles_at(lines, index, raise_if_malformed)
+        if index >= len(lines):
+            if preambles and raise_if_malformed:
+                raise ParseError('Unexpected end of text: expected diff data')
             else:
                 break
         for get_file_diff_at in _GET_DIFF_FUNCS:
