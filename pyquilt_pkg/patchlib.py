@@ -446,7 +446,15 @@ class Preambles(list):
                 return expaths[key]
         return None
 
-class _DiffData(_Lines):
+class Diff(_Lines):
+    subtypes = list()
+    @staticmethod
+    def get_diff_at(lines, index, raise_if_malformed):
+        for subtype in Diff.subtypes:
+            diff, next_index = subtype.get_diff_at(lines, index, raise_if_malformed)
+            if diff is not None:
+                return (diff, next_index)
+        return (None, index)
     def __init__(self, diff_type, lines, file_data, hunks):
         _Lines.__init__(self, lines)
         self.diff_type = diff_type
@@ -487,6 +495,247 @@ class _DiffData(_Lines):
             return _file_path_plus_fm_pair(self.file_data, strip)
         else:
             return None
+
+class UnifiedDiff(Diff):
+    BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?(.*)$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+    AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?(.*)$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+    HUNK_DATA_CRE = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
+    @staticmethod
+    def get_before_file_data_at(lines, index):
+        match = UnifiedDiff.BEFORE_FILE_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+    @staticmethod
+    def get_after_file_data_at(lines, index):
+        match = UnifiedDiff.AFTER_FILE_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+    @staticmethod
+    def get_hunk_at(lines, index, udiff_start_index):
+        match = UnifiedDiff.HUNK_DATA_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        start_index = index
+        before_length = int(match.group(3)) if match.group(3) is not None else 1
+        after_length = int(match.group(6)) if match.group(6) is not None else 1
+        index += 1
+        before_count = after_count = 0
+        try:
+            while before_count < before_length or after_count < after_length:
+                if lines[index].startswith('-'):
+                    before_count += 1
+                elif lines[index].startswith('+'):
+                    after_count += 1
+                elif lines[index].startswith(' '):
+                    before_count += 1
+                    after_count += 1
+                else:
+                    raise ParseError('Unexpected end of unified diff hunk.', index)
+                index += 1
+        except IndexError:
+            raise ParseError('Unexpected end of patch text.')
+        offset = start_index - udiff_start_index
+        numlines = index - start_index
+        before_hunk = _HUNK(offset, int(match.group(1)), before_length, numlines)
+        after_hunk = _HUNK(offset, int(match.group(4)), after_length, numlines)
+        return (_PAIR(before_hunk, after_hunk), index)
+    @staticmethod
+    def get_diff_at(lines, start_index, raise_if_malformed=False):
+        if len(lines) - start_index < 2:
+            return (None, start_index)
+        hunks = list()
+        index = start_index
+        before_file_data, index = UnifiedDiff.get_before_file_data_at(lines, index)
+        if not before_file_data:
+            return (None, start_index)
+        after_file_data, index = UnifiedDiff.get_after_file_data_at(lines, index)
+        if not after_file_data:
+            if raise_if_malformed:
+                raise ParseError('Missing unified diff after file data.', index)
+            else:
+                return (None, start_index)
+        while index < len(lines):
+            hunk, index = UnifiedDiff.get_hunk_at(lines, index, start_index)
+            if hunk is None:
+                break
+            hunks.append(hunk)
+        if len(hunks) == 0:
+            if raise_if_malformed:
+                raise ParseError('Expected unified diff hunks not found.', index)
+            else:
+                return (None, start_index)
+        return (UnifiedDiff(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
+    def __init__(self, lines, file_data, hunks):
+        Diff.__init__(self, 'unified', lines, file_data, hunks)
+    def _process_hunk_tws(self, hunk, fix=False):
+        bad_lines = list()
+        after_count = 0
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
+            if self.lines[index].startswith('+'):
+                after_count += 1
+                repl_line = _trim_trailing_ws(self.lines[index])
+                if len(repl_line) != len(self.lines[index]):
+                    bad_lines.append(str(hunk.after.start + after_count - 1))
+                    if fix:
+                        self.lines[index] = repl_line
+            elif self.lines[index].startswith(' '):
+                after_count += 1
+            elif DEBUG and not self.lines[index].startswith('-'):
+                raise Bug('Unexpected end of unified diff hunk.')
+        return bad_lines
+    def _get_hunk_diffstat_stats(self, hunk):
+        stats = DiffStats()
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
+            if self.lines[index].startswith('-'):
+                stats.incr('deleted')
+            elif self.lines[index].startswith('+'):
+                stats.incr('inserted')
+            elif DEBUG and not self.lines[index].startswith(' '):
+                raise Bug('Unexpected end of unified diff hunk.')
+        return stats
+
+Diff.subtypes.append(UnifiedDiff)
+
+class ContextDiff(Diff):
+    BEFORE_FILE_CRE = re.compile('^\*\*\* ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+    AFTER_FILE_CRE = re.compile('^--- ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
+    HUNK_START_CRE = re.compile('^\*{15}\s*(.*)$')
+    HUNK_BEFORE_CRE = re.compile('^\*\*\*\s+(\d+)(,(\d+))?\s+\*\*\*\*\s*(.*)$')
+    HUNK_AFTER_CRE = re.compile('^---\s+(\d+)(,(\d+))?\s+----(.*)$')
+    @staticmethod
+    def get_before_file_data_at(lines, index):
+        match = ContextDiff.BEFORE_FILE_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+    @staticmethod
+    def get_after_file_data_at(lines, index):
+        match = ContextDiff.AFTER_FILE_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+    @staticmethod
+    def _chunk(match):
+        start = int(match.group(1))
+        finish = int(match.group(3)) if match.group(3) is not None else start
+        if start == 0 and finish == 0:
+            length = 0
+        else:
+            length = finish - start + 1
+        return _CHUNK(start, length)
+    @staticmethod
+    def _get_before_chunk_at(lines, index):
+        match = ContextDiff.HUNK_BEFORE_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        return (ContextDiff._chunk(match), index + 1)
+    @staticmethod
+    def _get_after_chunk_at(lines, index):
+        match = ContextDiff.HUNK_AFTER_CRE.match(lines[index])
+        if not match:
+            return (None, index)
+        return (ContextDiff._chunk(match), index + 1)
+    @staticmethod
+    def get_hunk_at(lines, index, cdiff_start_index):
+        if not ContextDiff.HUNK_START_CRE.match(lines[index]):
+            return (None, index)
+        before_start_index = index + 1
+        before_chunk, index = ContextDiff._get_before_chunk_at(lines, before_start_index)
+        if not before_chunk:
+            return (None, index)
+        before_count = after_count = 0
+        try:
+            after_chunk = None
+            while before_count < before_chunk.length:
+                after_start_index = index
+                after_chunk, index = ContextDiff._get_after_chunk_at(lines, index)
+                if after_chunk is not None:
+                    break
+                before_count += 1
+                index += 1
+            if after_chunk is None:
+                after_start_index = index
+                after_chunk, index = ContextDiff._get_after_chunk_at(lines, index)
+                if after_chunk is None:
+                    raise ParseError('Failed to find context diff "after" hunk.', index)
+            while after_count < after_chunk.length:
+                if not (lines[index].startswith('! ') or lines[index].startswith('+ ') or lines[index].startswith('  ')):
+                    if after_count == 0:
+                        break
+                    raise ParseError('Unexpected end of context diff hunk.', index)
+                after_count += 1
+                index += 1
+        except IndexError:
+            raise ParseError('Unexpected end of patch text.')
+        before_hunk = _HUNK(before_start_index - cdiff_start_index, before_chunk.start, before_chunk.length, after_start_index - before_start_index)
+        after_hunk = _HUNK(after_start_index - cdiff_start_index, after_chunk.start, after_chunk.length, index - after_start_index)
+        return (_PAIR(before_hunk, after_hunk), index)
+    @staticmethod
+    def get_diff_at(lines, start_index, raise_if_malformed=False):
+        if len(lines) - start_index < 2:
+            return (None, start_index)
+        hunks = list()
+        index = start_index
+        before_file_data, index = ContextDiff.get_before_file_data_at(lines, index)
+        if not before_file_data:
+            return (None, start_index)
+        after_file_data, index = ContextDiff.get_after_file_data_at(lines, index)
+        if not after_file_data:
+            if raise_if_malformed:
+                raise ParseError('Missing context diff after file data.', index)
+            else:
+                return (None, start_index)
+        while index < len(lines):
+            hunk, index = ContextDiff.get_hunk_at(lines, index, start_index)
+            if hunk is None:
+                break
+            hunks.append(hunk)
+        if len(hunks) == 0:
+            if raise_if_malformed:
+                raise ParseError('Expected context diff hunks not found.', index)
+            else:
+                return (None, start_index)
+        return (ContextDiff(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
+    def __init__(self, lines, file_data, hunks):
+        Diff.__init__(self, 'context', lines, file_data, hunks)
+    def _process_hunk_tws(self, hunk, fix=False):
+        bad_lines = list()
+        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
+            if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
+                repl_line = self.lines[index][:2] + _trim_trailing_ws(self.lines[index][2:])
+                if len(repl_line) != len(self.lines[index]):
+                    after_count = index - (hunk.after.offset + 1)
+                    bad_lines.append(str(hunk.after.start + after_count))
+                    if fix:
+                        self.lines[index] = repl_line
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff hunk.')
+        return bad_lines
+    def _get_hunk_diffstat_stats(self, hunk):
+        stats = DiffStats()
+        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
+            if self.lines[index].startswith('- '):
+                stats.incr('deleted')
+            elif self.lines[index].startswith('! '):
+                stats.incr('modified')
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff "before" hunk.')
+        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
+            if self.lines[index].startswith('+ '):
+                stats.incr('inserted')
+            elif self.lines[index].startswith('! '):
+                stats.incr('modified')
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff "after" hunk.')
+        return stats
+
+Diff.subtypes.append(ContextDiff)
 
 class FilePatch(object):
     '''Class to hold patch (headerless) information relavent to a single file.'''
@@ -596,260 +845,6 @@ class Patch(object):
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
 
-# START: diff extraction code
-# START: Unified Diff Format specific code
-# Compiled regular expressions for unified diff format
-# Allow comments on end of ---/+++ to pass quilt's comments.test test
-UDIFF_BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?.*$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
-UDIFF_AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?.*$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
-UDIFF_HUNK_DATA_CRE = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
-
-def _get_udiff_before_file_data_at(lines, index):
-    match = UDIFF_BEFORE_FILE_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
-
-def _get_udiff_after_file_data_at(lines, index):
-    match = UDIFF_AFTER_FILE_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
-
-def _get_udiff_hunk_at(lines, index, udiff_start_index):
-    match = UDIFF_HUNK_DATA_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    start_index = index
-    before_length = int(match.group(3)) if match.group(3) is not None else 1
-    after_length = int(match.group(6)) if match.group(6) is not None else 1
-    index += 1
-    before_count = after_count = 0
-    try:
-        while before_count < before_length or after_count < after_length:
-            if lines[index].startswith('-'):
-                before_count += 1
-            elif lines[index].startswith('+'):
-                after_count += 1
-            elif lines[index].startswith(' '):
-                before_count += 1
-                after_count += 1
-            else:
-                raise ParseError('Unexpected end of unified diff hunk.', index)
-            index += 1
-    except IndexError:
-        raise ParseError('Unexpected end of patch text.')
-    offset = start_index - udiff_start_index
-    numlines = index - start_index
-    before_hunk = _HUNK(offset, int(match.group(1)), before_length, numlines)
-    after_hunk = _HUNK(offset, int(match.group(4)), after_length, numlines)
-    return (_PAIR(before_hunk, after_hunk), index)
-
-class _UDiffData(_DiffData):
-    def __init__(self, lines, file_data, hunks):
-        _DiffData.__init__(self, 'u', lines, file_data, hunks)
-    def _process_hunk_tws(self, hunk, fix=False):
-        bad_lines = list()
-        after_count = 0
-        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
-            if self.lines[index].startswith('+'):
-                after_count += 1
-                repl_line = _trim_trailing_ws(self.lines[index])
-                if len(repl_line) != len(self.lines[index]):
-                    bad_lines.append(str(hunk.after.start + after_count - 1))
-                    if fix:
-                        self.lines[index] = repl_line
-            elif self.lines[index].startswith(' '):
-                after_count += 1
-            elif DEBUG and not self.lines[index].startswith('-'):
-                raise Bug('Unexpected end of unified diff hunk.')
-        return bad_lines
-    def _get_hunk_diffstat_stats(self, hunk):
-        stats = DiffStats()
-        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
-            if self.lines[index].startswith('-'):
-                stats.incr('deleted')
-            elif self.lines[index].startswith('+'):
-                stats.incr('inserted')
-            elif DEBUG and not self.lines[index].startswith(' '):
-                raise Bug('Unexpected end of unified diff hunk.')
-        return stats
-
-def _get_file_udiff_at(lines, start_index, raise_if_malformed=False):
-    if len(lines) - start_index < 2:
-        return (None, start_index)
-    hunks = list()
-    index = start_index
-    before_file_data, index = _get_udiff_before_file_data_at(lines, index)
-    if not before_file_data:
-        return (None, start_index)
-    after_file_data, index = _get_udiff_after_file_data_at(lines, index)
-    if not after_file_data:
-        if raise_if_malformed:
-            raise ParseError('Missing unified diff after file data.', index)
-        else:
-            return (None, start_index)
-    while index < len(lines):
-        hunk, index = _get_udiff_hunk_at(lines, index, start_index)
-        if hunk is None:
-            break
-        hunks.append(hunk)
-    if len(hunks) == 0:
-        if raise_if_malformed:
-            raise ParseError('Expected unified diff hunks not found.', index)
-        else:
-            return (None, start_index)
-    return (_UDiffData(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
-
-# END: Unified Diff Format specific code
-
-# START: Context Diff Format specific code
-# Compiled regular expressions for context diff format
-CDIFF_BEFORE_FILE_CRE = re.compile('^\*\*\* ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
-CDIFF_AFTER_FILE_CRE = re.compile('^--- ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
-CDIFF_HUNK_START_CRE = re.compile('^\*{15}\s*(.*)$')
-CDIFF_HUNK_BEFORE_CRE = re.compile('^\*\*\*\s+(\d+)(,(\d+))?\s+\*\*\*\*\s*(.*)$')
-CDIFF_HUNK_AFTER_CRE = re.compile('^---\s+(\d+)(,(\d+))?\s+----(.*)$')
-
-def _get_cdiff_before_file_data_at(lines, index):
-    match = CDIFF_BEFORE_FILE_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
-
-def _get_cdiff_after_file_data_at(lines, index):
-    match = CDIFF_AFTER_FILE_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    filename = match.group(2) if match.group(2) else match.group(3)
-    return (_FILE_AND_TS(filename, match.group(4)), index + 1)
-
-def _cdiff_chunk(match):
-    start = int(match.group(1))
-    finish = int(match.group(3)) if match.group(3) is not None else start
-    if start == 0 and finish == 0:
-        length = 0
-    else:
-        length = finish - start + 1
-    return _CHUNK(start, length)
-
-def _get_cdiff_before_chunk_at(lines, index):
-    match = CDIFF_HUNK_BEFORE_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    return (_cdiff_chunk(match), index + 1)
-
-def _get_cdiff_after_chunk_at(lines, index):
-    match = CDIFF_HUNK_AFTER_CRE.match(lines[index])
-    if not match:
-        return (None, index)
-    return (_cdiff_chunk(match), index + 1)
-
-def _get_cdiff_hunk_at(lines, index, cdiff_start_index):
-    if not CDIFF_HUNK_START_CRE.match(lines[index]):
-        return (None, index)
-    before_start_index = index + 1
-    before_chunk, index = _get_cdiff_before_chunk_at(lines, before_start_index)
-    if not before_chunk:
-        return (None, index)
-    before_count = after_count = 0
-    try:
-        after_chunk = None
-        while before_count < before_chunk.length:
-            after_start_index = index
-            after_chunk, index = _get_cdiff_after_chunk_at(lines, index)
-            if after_chunk is not None:
-                break
-            before_count += 1
-            index += 1
-        if after_chunk is None:
-            after_start_index = index
-            after_chunk, index = _get_cdiff_after_chunk_at(lines, index)
-            if after_chunk is None:
-                raise ParseError('Failed to find context diff "after" hunk.', index)
-        while after_count < after_chunk.length:
-            if not (lines[index].startswith('! ') or lines[index].startswith('+ ') or lines[index].startswith('  ')):
-                if after_count == 0:
-                    break
-                raise ParseError('Unexpected end of context diff hunk.', index)
-            after_count += 1
-            index += 1
-    except IndexError:
-        raise ParseError('Unexpected end of patch text.')
-    before_hunk = _HUNK(before_start_index - cdiff_start_index, before_chunk.start, before_chunk.length, after_start_index - before_start_index)
-    after_hunk = _HUNK(after_start_index - cdiff_start_index, after_chunk.start, after_chunk.length, index - after_start_index)
-    return (_PAIR(before_hunk, after_hunk), index)
-
-class _CDiffData(_DiffData):
-    def __init__(self, lines, file_data, hunks):
-        _DiffData.__init__(self, 'context', lines, file_data, hunks)
-    def _process_hunk_tws(self, hunk, fix=False):
-        bad_lines = list()
-        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
-            if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
-                repl_line = self.lines[index][:2] + _trim_trailing_ws(self.lines[index][2:])
-                if len(repl_line) != len(self.lines[index]):
-                    after_count = index - (hunk.after.offset + 1)
-                    bad_lines.append(str(hunk.after.start + after_count))
-                    if fix:
-                        self.lines[index] = repl_line
-            elif DEBUG and not self.lines[index].startswith('  '):
-                raise Bug('Unexpected end of context diff hunk.')
-        return bad_lines
-    def _get_hunk_diffstat_stats(self, hunk):
-        stats = DiffStats()
-        for index in range(hunk.before.offset + 1, hunk.before.offset + hunk.before.numlines):
-            if self.lines[index].startswith('- '):
-                stats.incr('deleted')
-            elif self.lines[index].startswith('! '):
-                stats.incr('modified')
-            elif DEBUG and not self.lines[index].startswith('  '):
-                raise Bug('Unexpected end of context diff "before" hunk.')
-        for index in range(hunk.after.offset + 1, hunk.after.offset + hunk.after.numlines):
-            if self.lines[index].startswith('+ '):
-                stats.incr('inserted')
-            elif self.lines[index].startswith('! '):
-                stats.incr('modified')
-            elif DEBUG and not self.lines[index].startswith('  '):
-                raise Bug('Unexpected end of context diff "after" hunk.')
-        return stats
-
-def _get_file_cdiff_at(lines, start_index, raise_if_malformed=False):
-    if len(lines) - start_index < 2:
-        return (None, start_index)
-    hunks = list()
-    index = start_index
-    before_file_data, index = _get_cdiff_before_file_data_at(lines, index)
-    if not before_file_data:
-        return (None, start_index)
-    after_file_data, index = _get_cdiff_after_file_data_at(lines, index)
-    if not after_file_data:
-        if raise_if_malformed:
-            raise ParseError('Missing unified diff after file data.', index)
-        else:
-            return (None, start_index)
-    while index < len(lines):
-        hunk, index = _get_cdiff_hunk_at(lines, index, start_index)
-        if hunk is None:
-            break
-        hunks.append(hunk)
-    if len(hunks) == 0:
-        if raise_if_malformed:
-            raise ParseError('Expected unified diff hunks not found.', index)
-        else:
-            return (None, start_index)
-    return (_CDiffData(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
-
-# END: Context Diff Format specific code
-
-# An array to hold functions for extracting diffs from a list of lines
-# In order of likelihood of encounter
-_GET_DIFF_FUNCS = [_get_file_udiff_at, _get_file_cdiff_at]
-# END: diff extraction code
-
 def parse_lines(lines, simplify=False):
     '''Parse list of lines and return a FilePatch of Patch instance as appropriate'''
     diff_starts_at = None
@@ -865,10 +860,7 @@ def parse_lines(lines, simplify=False):
                 raise ParseError('Unexpected end of text: expected diff data')
             else:
                 break
-        for get_file_diff_at in _GET_DIFF_FUNCS:
-            diff_data, index = get_file_diff_at(lines, index, raise_if_malformed)
-            if diff_data:
-                break
+        diff_data, index = Diff.get_diff_at(lines, index, raise_if_malformed)
         if diff_data:
             if diff_starts_at is None:
                 diff_starts_at = starts_at
