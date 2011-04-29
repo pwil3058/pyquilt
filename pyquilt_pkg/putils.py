@@ -52,10 +52,10 @@ def get_patch_hdr(path, omit_diffstat=False):
 def get_patch_diff_fm_text(text, file_list=None, strip_level=0):
     obj = patchlib.parse_text(text)
     if not file_list:
-        return ''.join([str(x) for x in obj.file_patches])
+        return ''.join([str(x) for x in obj.diff_pluses])
     else:
         num_strip_level = int(strip_level)
-        return ''.join([str(x) for x in obj.file_patches if x.get_file_path(num_strip_level) in file_list])
+        return ''.join([str(x) for x in obj.diff_pluses if x.get_file_path(num_strip_level) in file_list])
 
 def get_patch_diff(path, file_list=None, strip_level=0):
     return get_patch_diff_fm_text(fsutils.get_file_contents(path), file_list, strip_level)

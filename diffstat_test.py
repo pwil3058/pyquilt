@@ -30,6 +30,13 @@ PARSER.add_argument(
 )
 
 PARSER.add_argument(
+    '--strict',
+    help='apply strict syntax rules when parsing files',
+    dest='opt_strict',
+    action='store_true',
+)
+
+PARSER.add_argument(
     'arg_patch_list',
     help='The name of the patch file to be processed.',
     metavar='patch',
@@ -37,6 +44,8 @@ PARSER.add_argument(
 )
 
 ARGS = PARSER.parse_args()
+
+patchlib.STRICT = ARGS.opt_strict is True
 
 # This will keep track of the order in which files were discovered
 stats_list = patchlib.DiffStatsList()

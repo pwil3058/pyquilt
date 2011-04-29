@@ -40,6 +40,7 @@ class ParseError(Exception):
         self.lineno = lineno
 
 DEBUG = False
+STRICT = True
 class Bug(Exception): pass
 
 def gen_strip_level_function(level):
@@ -408,6 +409,8 @@ class Preambles(list):
             else:
                 break
         return (preambles, index)
+    def __str__(self):
+        return ''.join([str(preamble) for preamble in self])
     def get_types(self):
         return [item.preamble_type for item in self]
     def get_index_for_type(self, preamble_type):
@@ -708,19 +711,37 @@ class ContextDiff(Diff):
 
 Diff.subtypes.append(ContextDiff)
 
-class FilePatch(object):
-    '''Class to hold patch (headerless) information relavent to a single file.'''
-    def __init__(self):
-        self.preambles = Preambles()
-        self.diff = None
+class DiffPlus(object):
+    '''Class to hold diff (headerless) information relavent to a single file.
+    Includes (optional) preambles and trailing junk such as quilt's separators.'''
+    @staticmethod
+    def get_diff_plus_at(lines, start_index, raise_if_malformed=False):
+        preambles, index = Preambles.get_preambles_at(lines, start_index, raise_if_malformed)
+        if index >= len(lines):
+            if preambles and raise_if_malformed:
+                raise ParseError('Unexpected end of text: expected diff data')
+            else:
+                return (None, start_index)
+        diff_data, index = Diff.get_diff_at(lines, index, raise_if_malformed)
+        if not diff_data:
+            if preambles and raise_if_malformed:
+                # Allow for bug in some patch generating scripts
+                # that sometimes don't notice empty diff results
+                if not STRICT:
+                    return (DiffPlus(preambles, None), index)
+                else:
+                    raise ParseError('Expected diff data: not found', index)
+            else:
+                return (None, start_index)
+        return (DiffPlus(preambles, diff_data), index)
+    def __init__(self, preambles=None, diff=None):
+        self.preambles = Preambles() if preambles is None else preambles
+        self.diff = diff
         self.trailing_junk = _Lines()
+        if DEBUG:
+            assert isinstance(self.preambles, Preambles) and (self.diff is None or isinstance(self.diff, Diff))
     def __str__(self):
-        string = ''
-        for pream in self.preambles:
-            string += str(pream)
-        string += str(self.diff)
-        string += str(self.trailing_junk)
-        return string
+        return str(self.preambles) + str(self.diff) + str(self.trailing_junk)
     def fix_trailing_whitespace(self):
         if self.diff is None:
             return []
@@ -753,7 +774,7 @@ class Patch(object):
     def __init__(self, num_strip_levels=0):
         self.num_strip_levels = int(num_strip_levels)
         self.header = None
-        self.file_patches = list()
+        self.diff_pluses = list()
     def _adjusted_strip_level(self, strip_level):
         return int(strip_level) if strip_level is not None else self.num_strip_levels
     def set_strip_level(self, strip_level):
@@ -785,72 +806,63 @@ class Patch(object):
             self.header.set_diffstat(text)
     def __str__(self):
         string = self.get_header()
-        for file_patch in self.file_patches:
-            string += str(file_patch)
+        for diff_plus in self.diff_pluses:
+            string += str(diff_plus)
         return string
     def get_file_paths(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
-        return [file_patch.get_file_path(strip_level=strip_level) for file_patch in self.file_patches]
+        return [diff_plus.get_file_path(strip_level=strip_level) for diff_plus in self.diff_pluses]
     def get_file_paths_plus(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
-        return [file_patch.get_file_path_plus(strip_level=strip_level) for file_patch in self.file_patches]
+        return [diff_plus.get_file_path_plus(strip_level=strip_level) for diff_plus in self.diff_pluses]
     def get_diffstat_stats(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
-        return DiffStatsList([PathDiffStats(file_patch.get_file_path(strip_level=strip_level), file_patch.get_diffstat_stats()) for file_patch in self.file_patches])
+        return DiffStatsList([PathDiffStats(diff_plus.get_file_path(strip_level=strip_level), diff_plus.get_diffstat_stats()) for diff_plus in self.diff_pluses])
     def fix_trailing_whitespace(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
         reports = []
-        for file_patch in self.file_patches:
-            bad_lines = file_patch.fix_trailing_whitespace()
+        for diff_plus in self.diff_pluses:
+            bad_lines = diff_plus.fix_trailing_whitespace()
             if bad_lines:
-                path = file_patch.get_file_path(strip_level=strip_level)
+                path = diff_plus.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
     def report_trailing_whitespace(self, strip_level=None):
         strip_level = self._adjusted_strip_level(strip_level)
         reports = []
-        for file_patch in self.file_patches:
-            bad_lines = file_patch.report_trailing_whitespace()
+        for diff_plus in self.diff_pluses:
+            bad_lines = diff_plus.report_trailing_whitespace()
             if bad_lines:
-                path = file_patch.get_file_path(strip_level=strip_level)
+                path = diff_plus.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
 
 def parse_lines(lines, simplify=False):
-    '''Parse list of lines and return a FilePatch of Patch instance as appropriate'''
+    '''Parse list of lines and return a DiffPlus or Patch instance as appropriate'''
     diff_starts_at = None
-    file_patches = list()
+    diff_pluses = list()
     index = 0
-    last_file_patch = None
+    last_diff_plus = None
     while index < len(lines):
         raise_if_malformed = diff_starts_at is not None
         starts_at = index
-        preambles, index = Preambles.get_preambles_at(lines, index, raise_if_malformed)
-        if index >= len(lines):
-            if preambles and raise_if_malformed:
-                raise ParseError('Unexpected end of text: expected diff data')
-            else:
-                break
-        diff_data, index = Diff.get_diff_at(lines, index, raise_if_malformed)
-        if diff_data:
+        diff_plus, index = DiffPlus.get_diff_plus_at(lines, index, raise_if_malformed)
+        if diff_plus:
             if diff_starts_at is None:
                 diff_starts_at = starts_at
-            file_patch = FilePatch()
-            file_patch.diff = diff_data
-            file_patch.preambles = preambles
-            file_patches.append(file_patch)
-            last_file_patch = file_patch
+            diff_pluses.append(diff_plus)
+            last_diff_plus = diff_plus
             continue
-        elif last_file_patch:
-            last_file_patch.trailing_junk.append(lines[index])
+        elif last_diff_plus:
+            last_diff_plus.trailing_junk.append(lines[index])
         index += 1
-    if simplify and (diff_starts_at == 0 and len(file_patches) == 1):
-        return last_file_patch
+    if simplify and (diff_starts_at == 0 and len(diff_pluses) == 1):
+        return last_diff_plus
     patch = Patch()
-    patch.file_patches = file_patches
+    patch.diff_pluses = diff_pluses
     patch.set_header(''.join(lines[0:diff_starts_at]))
     return patch
 
 def parse_text(text, simplify=False):
-    '''Parse text and return a FilePatch of Patch instance as appropriate'''
+    '''Parse text and return a DiffPlus or Patch instance as appropriate'''
     return parse_lines(text.splitlines(True), simplify)
