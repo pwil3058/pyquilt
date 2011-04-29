@@ -449,6 +449,39 @@ class Preambles(list):
 class Diff(_Lines):
     subtypes = list()
     @staticmethod
+    def _get_file_data_at(cre, lines, index):
+        match = cre.match(lines[index])
+        if not match:
+            return (None, index)
+        filename = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+    @staticmethod
+    def _get_diff_at(subtype, lines, start_index, raise_if_malformed=False):
+        if len(lines) - start_index < 2:
+            return (None, start_index)
+        hunks = list()
+        index = start_index
+        before_file_data, index = subtype.get_before_file_data_at(lines, index)
+        if not before_file_data:
+            return (None, start_index)
+        after_file_data, index = subtype.get_after_file_data_at(lines, index)
+        if not after_file_data:
+            if raise_if_malformed:
+                raise ParseError('Missing unified diff after file data.', index)
+            else:
+                return (None, start_index)
+        while index < len(lines):
+            hunk, index = subtype.get_hunk_at(lines, index, start_index)
+            if hunk is None:
+                break
+            hunks.append(hunk)
+        if len(hunks) == 0:
+            if raise_if_malformed:
+                raise ParseError('Expected unified diff hunks not found.', index)
+            else:
+                return (None, start_index)
+        return (subtype(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
+    @staticmethod
     def get_diff_at(lines, index, raise_if_malformed):
         for subtype in Diff.subtypes:
             diff, next_index = subtype.get_diff_at(lines, index, raise_if_malformed)
@@ -502,18 +535,10 @@ class UnifiedDiff(Diff):
     HUNK_DATA_CRE = re.compile("^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$")
     @staticmethod
     def get_before_file_data_at(lines, index):
-        match = UnifiedDiff.BEFORE_FILE_CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+        return Diff._get_file_data_at(UnifiedDiff.BEFORE_FILE_CRE, lines, index)
     @staticmethod
     def get_after_file_data_at(lines, index):
-        match = UnifiedDiff.AFTER_FILE_CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+        return Diff._get_file_data_at(UnifiedDiff.AFTER_FILE_CRE, lines, index)
     @staticmethod
     def get_hunk_at(lines, index, udiff_start_index):
         match = UnifiedDiff.HUNK_DATA_CRE.match(lines[index])
@@ -545,30 +570,7 @@ class UnifiedDiff(Diff):
         return (_PAIR(before_hunk, after_hunk), index)
     @staticmethod
     def get_diff_at(lines, start_index, raise_if_malformed=False):
-        if len(lines) - start_index < 2:
-            return (None, start_index)
-        hunks = list()
-        index = start_index
-        before_file_data, index = UnifiedDiff.get_before_file_data_at(lines, index)
-        if not before_file_data:
-            return (None, start_index)
-        after_file_data, index = UnifiedDiff.get_after_file_data_at(lines, index)
-        if not after_file_data:
-            if raise_if_malformed:
-                raise ParseError('Missing unified diff after file data.', index)
-            else:
-                return (None, start_index)
-        while index < len(lines):
-            hunk, index = UnifiedDiff.get_hunk_at(lines, index, start_index)
-            if hunk is None:
-                break
-            hunks.append(hunk)
-        if len(hunks) == 0:
-            if raise_if_malformed:
-                raise ParseError('Expected unified diff hunks not found.', index)
-            else:
-                return (None, start_index)
-        return (UnifiedDiff(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
+        return Diff._get_diff_at(UnifiedDiff, lines, start_index, raise_if_malformed)
     def __init__(self, lines, file_data, hunks):
         Diff.__init__(self, 'unified', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
@@ -608,18 +610,10 @@ class ContextDiff(Diff):
     HUNK_AFTER_CRE = re.compile('^---\s+(\d+)(,(\d+))?\s+----(.*)$')
     @staticmethod
     def get_before_file_data_at(lines, index):
-        match = ContextDiff.BEFORE_FILE_CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+        return Diff._get_file_data_at(ContextDiff.BEFORE_FILE_CRE, lines, index)
     @staticmethod
     def get_after_file_data_at(lines, index):
-        match = ContextDiff.AFTER_FILE_CRE.match(lines[index])
-        if not match:
-            return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+        return Diff._get_file_data_at(ContextDiff.AFTER_FILE_CRE, lines, index)
     @staticmethod
     def _chunk(match):
         start = int(match.group(1))
@@ -678,30 +672,7 @@ class ContextDiff(Diff):
         return (_PAIR(before_hunk, after_hunk), index)
     @staticmethod
     def get_diff_at(lines, start_index, raise_if_malformed=False):
-        if len(lines) - start_index < 2:
-            return (None, start_index)
-        hunks = list()
-        index = start_index
-        before_file_data, index = ContextDiff.get_before_file_data_at(lines, index)
-        if not before_file_data:
-            return (None, start_index)
-        after_file_data, index = ContextDiff.get_after_file_data_at(lines, index)
-        if not after_file_data:
-            if raise_if_malformed:
-                raise ParseError('Missing context diff after file data.', index)
-            else:
-                return (None, start_index)
-        while index < len(lines):
-            hunk, index = ContextDiff.get_hunk_at(lines, index, start_index)
-            if hunk is None:
-                break
-            hunks.append(hunk)
-        if len(hunks) == 0:
-            if raise_if_malformed:
-                raise ParseError('Expected context diff hunks not found.', index)
-            else:
-                return (None, start_index)
-        return (ContextDiff(lines[start_index:index], _PAIR(before_file_data, after_file_data), hunks), index)
+        return Diff._get_diff_at(ContextDiff, lines, start_index, raise_if_malformed)
     def __init__(self, lines, file_data, hunks):
         Diff.__init__(self, 'context', lines, file_data, hunks)
     def _process_hunk_tws(self, hunk, fix=False):
