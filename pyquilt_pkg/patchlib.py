@@ -283,6 +283,17 @@ class Preamble(_Lines):
             if preamble is not None:
                 return (preamble, next_index)
         return (None, index)
+    @staticmethod
+    def parse_lines(lines):
+        '''Parse list of lines and return a valid Preamble or raise exception'''
+        preamble, index = Preamble.get_preamble_at(lines, 0, raise_if_malformed=True)
+        if not preamble or index < len(lines):
+            raise ParseError('Not a valid preamble.')
+        return preamble
+    @staticmethod
+    def parse_text(text):
+        '''Parse text and return a valid Preamble or raise exception'''
+        return DiffPlus.parse_lines(text.splitlines(True))
     def __init__(self, preamble_type, lines, file_data, extras=None):
         _Lines.__init__(self, lines)
         self.preamble_type = preamble_type
@@ -409,6 +420,17 @@ class Preambles(list):
             else:
                 break
         return (preambles, index)
+    @staticmethod
+    def parse_lines(lines):
+        '''Parse list of lines and return a valid Preambles list or raise exception'''
+        preambles, index = Preambles.get_preambles_at(lines, 0, raise_if_malformed=True)
+        if not preambles or index < len(lines):
+            raise ParseError('Not a valid preamble list.')
+        return preambles
+    @staticmethod
+    def parse_text(text):
+        '''Parse text and return a valid Preambles list or raise exception'''
+        return DiffPlus.parse_lines(text.splitlines(True))
     def __str__(self):
         return ''.join([str(preamble) for preamble in self])
     def get_types(self):
@@ -491,6 +513,17 @@ class Diff(_Lines):
             if diff is not None:
                 return (diff, next_index)
         return (None, index)
+    @staticmethod
+    def parse_lines(lines):
+        '''Parse list of lines and return a valid Diff or raise exception'''
+        diff, index = Diff.get_diff_at(lines, 0, raise_if_malformed=True)
+        if not diff or index < len(lines):
+            raise ParseError('Not a valid diff.')
+        return plus
+    @staticmethod
+    def parse_text(text):
+        '''Parse text and return a valid DiffPlus or raise exception'''
+        return Diff.parse_lines(text.splitlines(True))
     def __init__(self, diff_type, lines, file_data, hunks):
         _Lines.__init__(self, lines)
         self.diff_type = diff_type
@@ -734,6 +767,17 @@ class DiffPlus(object):
             else:
                 return (None, start_index)
         return (DiffPlus(preambles, diff_data), index)
+    @staticmethod
+    def parse_lines(lines):
+        '''Parse list of lines and return a valid DiffPlus or raise exception'''
+        diff_plus, index = DiffPlus.get_diff_plus_at(lines, 0, raise_if_malformed=True)
+        if not diff_plus or index < len(lines):
+            raise ParseError('Not a valid (optionally preambled) diff.')
+        return diff_plus
+    @staticmethod
+    def parse_text(text):
+        '''Parse text and return a valid DiffPlus or raise exception'''
+        return DiffPlus.parse_lines(text.splitlines(True))
     def __init__(self, preambles=None, diff=None):
         self.preambles = Preambles() if preambles is None else preambles
         self.diff = diff
@@ -771,6 +815,34 @@ class DiffPlus(object):
 class Patch(object):
     '''Class to hold patch information relavent to multiple files with
     an optional header (or a single file with a header).'''
+    @staticmethod
+    def parse_lines(lines, num_strip_levels=0):
+        '''Parse list of lines and return a Patch instance'''
+        diff_starts_at = None
+        diff_pluses = list()
+        index = 0
+        last_diff_plus = None
+        while index < len(lines):
+            raise_if_malformed = diff_starts_at is not None
+            starts_at = index
+            diff_plus, index = DiffPlus.get_diff_plus_at(lines, index, raise_if_malformed)
+            if diff_plus:
+                if diff_starts_at is None:
+                    diff_starts_at = starts_at
+                diff_pluses.append(diff_plus)
+                last_diff_plus = diff_plus
+                continue
+            elif last_diff_plus:
+                last_diff_plus.trailing_junk.append(lines[index])
+            index += 1
+        patch = Patch(num_strip_levels=num_strip_levels)
+        patch.diff_pluses = diff_pluses
+        patch.set_header(''.join(lines[0:diff_starts_at]))
+        return patch
+    @staticmethod
+    def parse_text(text, num_strip_levels=0):
+        '''Parse text and return a Patch instance'''
+        return Patch.parse_lines(text.splitlines(True), num_strip_levels=num_strip_levels)
     def __init__(self, num_strip_levels=0):
         self.num_strip_levels = int(num_strip_levels)
         self.header = None
@@ -836,33 +908,3 @@ class Patch(object):
                 path = diff_plus.get_file_path(strip_level=strip_level)
                 reports.append(_FILE_AND_TWS_LINES(path, bad_lines))
         return reports
-
-def parse_lines(lines, simplify=False):
-    '''Parse list of lines and return a DiffPlus or Patch instance as appropriate'''
-    diff_starts_at = None
-    diff_pluses = list()
-    index = 0
-    last_diff_plus = None
-    while index < len(lines):
-        raise_if_malformed = diff_starts_at is not None
-        starts_at = index
-        diff_plus, index = DiffPlus.get_diff_plus_at(lines, index, raise_if_malformed)
-        if diff_plus:
-            if diff_starts_at is None:
-                diff_starts_at = starts_at
-            diff_pluses.append(diff_plus)
-            last_diff_plus = diff_plus
-            continue
-        elif last_diff_plus:
-            last_diff_plus.trailing_junk.append(lines[index])
-        index += 1
-    if simplify and (diff_starts_at == 0 and len(diff_pluses) == 1):
-        return last_diff_plus
-    patch = Patch()
-    patch.diff_pluses = diff_pluses
-    patch.set_header(''.join(lines[0:diff_starts_at]))
-    return patch
-
-def parse_text(text, simplify=False):
-    '''Parse text and return a DiffPlus or Patch instance as appropriate'''
-    return parse_lines(text.splitlines(True), simplify)

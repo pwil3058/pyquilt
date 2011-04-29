@@ -26,7 +26,7 @@ from pyquilt_pkg import cmd_result
 from pyquilt_pkg import patchlib
 
 def get_patch_descr_fm_text(text):
-    obj = patchlib.parse_text(text)
+    obj = patchlib.Patch.parse_text(text)
     return obj.get_description()
 
 def get_patch_descr(path):
@@ -37,7 +37,7 @@ def get_patch_descr(path):
     return get_patch_descr_fm_text(buf)
 
 def get_patch_hdr_fm_text(text, omit_diffstat=False):
-    obj = patchlib.parse_text(text)
+    obj = patchlib.Patch.parse_text(text)
     if omit_diffstat:
         obj.set_diffstat('')
     return obj.get_header()
@@ -50,7 +50,7 @@ def get_patch_hdr(path, omit_diffstat=False):
     return get_patch_hdr_fm_text(buf, omit_diffstat)
 
 def get_patch_diff_fm_text(text, file_list=None, strip_level=0):
-    obj = patchlib.parse_text(text)
+    obj = patchlib.Patch.parse_text(text)
     if not file_list:
         return ''.join([str(x) for x in obj.diff_pluses])
     else:
@@ -81,7 +81,7 @@ def _write_via_temp(path, text):
 
 def set_patch_descr(path, text):
     if os.path.exists(path):
-        patch_obj = patchlib.parse_text(fsutils.get_file_contents(path))
+        patch_obj = patchlib.Patch.parse_text(fsutils.get_file_contents(path))
     else:
         patch_obj = patchlib.Patch()
     patch_obj.set_description(text)
@@ -89,11 +89,11 @@ def set_patch_descr(path, text):
 
 def set_patch_hdr(path, text, omit_diffstat=False):
     if os.path.exists(path):
-        patch_obj = patchlib.parse_text(fsutils.get_file_contents(path))
+        patch_obj = patchlib.Patch.parse_text(fsutils.get_file_contents(path))
     else:
         patch_obj = patchlib.Patch()
     if omit_diffstat:
-        dummy = patchlib.parse_text(text)
+        dummy = patchlib.Patch.parse_text(text)
         dummy.set_diffstat('')
         text = dummy.get_header()
     patch_obj.set_header(text)
@@ -104,7 +104,7 @@ def get_patch_files(path, strip_level=1):
         buf = fsutils.get_file_contents(path)
     except IOError:
         return (False, 'Problem(s) open file "%s" not found' % path)
-    obj = patchlib.parse_text(buf)
+    obj = patchlib.Patch.parse_text(buf)
     return obj.get_file_paths(int(strip_level))
 
 def apply_patch_text(text, indir=None, patch_args=''):
@@ -122,7 +122,7 @@ def apply_patch(patch_file, indir=None, patch_args=''):
     return apply_patch_text(text, indir=indir, patch_args=patch_args)
 
 def remove_trailing_ws(text, strip_level, dry_run=False):
-    obj = patchlib.parse_text(text)
+    obj = patchlib.Patch.parse_text(text)
     report = obj.fix_trailing_whitespace(int(strip_level))
     errtext = ''
     if dry_run:

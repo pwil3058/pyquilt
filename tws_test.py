@@ -44,7 +44,7 @@ elif os.path.isfile(ARGS.arg_patch_file):
     text = open(ARGS.arg_patch_file).read()
 
 try:
-    patch = patchlib.parse_text(text)
+    patch = patchlib.Patch.parse_text(text)
 except patchlib.ParseError as pedata:
     print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno
     sys.exit(1)

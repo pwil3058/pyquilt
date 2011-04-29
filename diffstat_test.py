@@ -51,7 +51,7 @@ patchlib.STRICT = ARGS.opt_strict is True
 stats_list = patchlib.DiffStatsList()
 
 def process_text(text, strip_level=1):
-    for stat in patchlib.parse_text(text).get_diffstat_stats(strip_level):
+    for stat in patchlib.Patch.parse_text(text).get_diffstat_stats(strip_level):
         if stat not in stats_list:
             stats_list.append(stat)
         else:
