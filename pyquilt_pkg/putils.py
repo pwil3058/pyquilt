@@ -40,7 +40,8 @@ def get_patch_hdr_fm_text(text, omit_diffstat=False):
     obj = patchlib.Patch.parse_text(text)
     if omit_diffstat:
         obj.set_diffstat('')
-    return obj.get_header()
+    hdr = obj.get_header()
+    return '' if hdr is None else str(hdr)
 
 def get_patch_hdr(path, omit_diffstat=False):
     try:
@@ -95,7 +96,8 @@ def set_patch_hdr(path, text, omit_diffstat=False):
     if omit_diffstat:
         dummy = patchlib.Patch.parse_text(text)
         dummy.set_diffstat('')
-        text = dummy.get_header()
+        hdr = dummy.get_header()
+        text = '' if hdr is None else str(hdr)
     patch_obj.set_header(text)
     return _write_via_temp(path, str(patch_obj))
 

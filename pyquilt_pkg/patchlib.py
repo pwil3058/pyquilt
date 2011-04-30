@@ -205,7 +205,7 @@ class _Lines(object):
         else:
             self.lines += list(data)
 
-class _Header(object):
+class Header(object):
     def __init__(self, text=''):
         lines = text.splitlines(True)
         descr_starts_at = 0
@@ -846,39 +846,39 @@ class Patch(object):
         return Patch.parse_lines(text.splitlines(True), num_strip_levels=num_strip_levels)
     def __init__(self, num_strip_levels=0):
         self.num_strip_levels = int(num_strip_levels)
-        self.header = None
+        self.header = Header()
         self.diff_pluses = list()
     def _adjusted_strip_level(self, strip_level):
         return int(strip_level) if strip_level is not None else self.num_strip_levels
     def set_strip_level(self, strip_level):
         self.num_strip_levels = int(strip_level)
     def get_header(self):
-        return '' if self.header is None else str(self.header)
+        return self.header
     def set_header(self, text):
-        self.header = _Header(text)
+        self.header = Header(text)
     def get_comments(self):
         return '' if self.header is None else self.header.get_comments()
     def set_comments(self, text):
         if not self.header:
-            self.header = _Header(text)
+            self.header = Header(text)
         else:
             self.header.set_comments(text)
     def get_description(self):
         return '' if self.header is None else self.header.get_description()
     def set_description(self, text):
         if not self.header:
-            self.header = _Header(text)
+            self.header = Header(text)
         else:
             self.header.set_description(text)
     def get_header_diffstat(self):
         return '' if self.header is None else self.header.get_diffstat()
     def set_header_diffstat(self, text):
         if not self.header:
-            self.header = _Header(text)
+            self.header = Header(text)
         else:
             self.header.set_diffstat(text)
     def __str__(self):
-        string = self.get_header()
+        string = '' if self.header is None else str(self.header)
         for diff_plus in self.diff_pluses:
             string += str(diff_plus)
         return string
