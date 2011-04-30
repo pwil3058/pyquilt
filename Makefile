@@ -1,5 +1,5 @@
 QUILTTESTDIR=$(HOME)/WSRC/quilt/test
-TESTDIR=test
+TESTDIR=quilt-test
 QUILTTESTS :=	$(filter-out $(QUILTTESTDIR)/patch-wrapper.test,$(wildcard $(QUILTTESTDIR)/*.test))
 TESTS := $(patsubst $(QUILTTESTDIR)/%.test, $(TESTDIR)/%.test, $(QUILTTESTS))
 DIRT +=		$(wildcard $(TESTDIR)/.*.ok)
