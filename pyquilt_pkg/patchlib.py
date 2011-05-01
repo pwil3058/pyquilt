@@ -40,7 +40,6 @@ class ParseError(Exception):
         self.lineno = lineno
 
 DEBUG = False
-STRICT = True
 class Bug(Exception): pass
 
 def gen_strip_level_function(level):
@@ -752,19 +751,14 @@ class DiffPlus(object):
     def get_diff_plus_at(lines, start_index, raise_if_malformed=False):
         preambles, index = Preambles.get_preambles_at(lines, start_index, raise_if_malformed)
         if index >= len(lines):
-            if preambles and raise_if_malformed:
-                raise ParseError('Unexpected end of text: expected diff data')
+            if preambles:
+                return (DiffPlus(preambles, None), index)
             else:
                 return (None, start_index)
         diff_data, index = Diff.get_diff_at(lines, index, raise_if_malformed)
         if not diff_data:
-            if preambles and raise_if_malformed:
-                # Allow for bug in some patch generating scripts
-                # that sometimes don't notice empty diff results
-                if not STRICT:
-                    return (DiffPlus(preambles, None), index)
-                else:
-                    raise ParseError('Expected diff data: not found', index)
+            if preambles:
+                return (DiffPlus(preambles, None), index)
             else:
                 return (None, start_index)
         return (DiffPlus(preambles, diff_data), index)
