@@ -889,11 +889,13 @@ class Patch(object):
             self.header.set_description(text)
     def get_header_diffstat(self):
         return '' if self.header is None else self.header.get_diffstat()
-    def set_header_diffstat(self, text):
+    def set_header_diffstat(self, text=None, strip_level=None):
         if not self.header:
-            self.header = Header(text)
-        else:
-            self.header.set_diffstat(text)
+            self.header = Header()
+        if text is None:
+            stats = self.get_diffstat_stats(strip_level)
+            text = '-\n\n%s\n' % stats.list_format_string()
+        self.header.set_diffstat(text)
     def __str__(self):
         string = '' if self.header is None else str(self.header)
         for diff_plus in self.diff_pluses:
