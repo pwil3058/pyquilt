@@ -325,7 +325,7 @@ class GitPreamble(Preamble):
         'rename to' : re.compile('^(rename to)\s+({0})$'.format(_PATH_RE_STR)),
         'similarity index' : re.compile('^(similarity index)\s+((\d*)%)$'),
         'dissimilarity index' : re.compile('^(dissimilarity index)\s+((\d*)%)$'),
-        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*)%)$'),
+        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*))$'),
     }
     @staticmethod
     def get_preamble_at(lines, index, raise_if_malformed):
