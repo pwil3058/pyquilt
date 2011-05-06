@@ -30,6 +30,13 @@ PARSER.add_argument(
 )
 
 PARSER.add_argument(
+    '-p',
+    help='strip level to use',
+    dest='opt_strip_level',
+    metavar='level',
+)
+
+PARSER.add_argument(
     'arg_patch_list',
     help='The name of the patch file to be processed.',
     metavar='patch',
@@ -50,9 +57,12 @@ def process_text(text, strip_level=1):
 
 if len(ARGS.arg_patch_list) == 0:
     try:
-        process_text(sys.stdin.read())
+        process_text(sys.stdin.read(), ARGS.opt_strip_level)
     except patchlib.ParseError as pedata:
         print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno
+        sys.exit(1)
+    except patchlib.TooMayStripLevels as tsmldata:
+        print 'ERROR:', tsmldata.message, 'LEVELS:', tsmldata.levels, 'FILE:', tsmldata.path
         sys.exit(1)
 else:
     bad_files = [filename for filename in ARGS.arg_patch_list if not os.path.isfile(filename)]
@@ -64,9 +74,12 @@ else:
         sys.exit(1)
     for patch_filename in ARGS.arg_patch_list:
         try:
-            process_text(open(patch_filename).read())
+            process_text(open(patch_filename).read(), ARGS.opt_strip_level)
         except patchlib.ParseError as pedata:
             print 'ERROR:', pedata.message, 'LINE NO:', pedata.lineno, 'FILE:', patch_filename
+            sys.exit(1)
+        except patchlib.TooMayStripLevels as tsmldata:
+            print 'ERROR:', tsmldata.message, 'LEVELS:', tsmldata.levels, 'FILE:', tsmldata.path, 'IN:', patch_filename
             sys.exit(1)
 
 if not ARGS.opt_unsorted:

@@ -38,13 +38,26 @@ class ParseError(Exception):
         self.message = message
         self.lineno = lineno
 
+class TooMayStripLevels(Exception):
+    def __init__(self, message, path, levels):
+        self.message = message
+        self.path = path
+        self.levels = levels
+
 DEBUG = False
 class Bug(Exception): pass
 
 def gen_strip_level_function(level):
     '''Return a function for stripping the specified levels off a file path'''
+    def strip_n(path, level):
+        try:
+            return path.split(os.sep, level)[level]
+        except IndexError:
+            raise TooMayStripLevels('Strip level too large', path, level)
     level = int(level)
-    return lambda string: string if string.startswith(os.sep) else string.split(os.sep, level)[level]
+    if level == 0:
+        return lambda path: path
+    return lambda path: path if path.startswith(os.sep) else strip_n(path, level)
 
 def get_common_path(filelist):
     '''Return the longest common path componet for the files in the list'''
