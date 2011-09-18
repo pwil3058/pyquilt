@@ -354,8 +354,7 @@ def run_mail(args):
         if not re.match('^\S+@\S+\.\S+$', args.opt_sender):
             output.error('Could not determine the envelope sender address. Please use --sender.\n')
             return cmd_result.ERROR
-    match = re.match('^[^<]*<([^<>]+)>.*$', args.opt_sender)
-    args.opt_sender_address = match.group(1) if match else args.opt_sender
+    _dummy, args.opt_sender_address = email.utils.parseaddr(args.opt_sender)
     if not args.opt_charset:
         lc_all = os.getenv('LC_ALL', patchfns.ORIGINAL_LANG)
         if lc_all and lc_all.endswith('UTF-8'):
