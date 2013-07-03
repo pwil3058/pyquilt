@@ -1,4 +1,4 @@
-### Copyright (C) 2011 Peter Williams <peter@users.sourceforge.net>
+### Copyright (C) 2011 Peter Williams <peter_ono@users.sourceforge.net>
 ###
 ### This program is free software; you can redistribute it and/or modify
 ### it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 import collections
 import re
 import os
+import email
 
 # Useful named tuples to make code clearer
 _CHUNK = collections.namedtuple('_CHUNK', ['start', 'length'])
@@ -43,6 +44,8 @@ class TooMayStripLevels(Exception):
         self.message = message
         self.path = path
         self.levels = levels
+
+class DataError(ParseError): pass
 
 DEBUG = False
 class Bug(Exception): pass
@@ -177,21 +180,22 @@ class DiffStat(object):
                 offset = len(common_path)
             else:
                 offset = 0
-            len_longest_name = max([len(x.path) for x in self]) - offset
-            fstr = '%s {0}{1} |{2:5} {3}\n' % ('#' if comment else '')
-            largest_total = max(max([x.diff_stats.get_total() for x in self]), 1)
-            avail_width = max(0, max_width - (len_longest_name + 9))
-            if comment:
-                avail_width -= 1
-            scale = lambda x: (x * avail_width) / largest_total
-            summation = DiffStat.Stats()
-            for stats in self:
-                summation += stats.diff_stats
-                total = stats.diff_stats.get_total()
-                name = stats.path[offset:]
-                spaces = ' ' * (len_longest_name - len(name))
-                string += fstr.format(name, spaces, total, stats.diff_stats.as_bar(scale))
             num_files = len(self)
+            summation = DiffStat.Stats()
+            if num_files > 0:
+                len_longest_name = max([len(x.path) for x in self]) - offset
+                fstr = '%s {0}{1} |{2:5} {3}\n' % ('#' if comment else '')
+                largest_total = max(max([x.diff_stats.get_total() for x in self]), 1)
+                avail_width = max(0, max_width - (len_longest_name + 9))
+                if comment:
+                    avail_width -= 1
+                scale = lambda x: (x * avail_width) / largest_total
+                for stats in self:
+                    summation += stats.diff_stats
+                    total = stats.diff_stats.get_total()
+                    name = stats.path[offset:]
+                    spaces = ' ' * (len_longest_name - len(name))
+                    string += fstr.format(name, spaces, total, stats.diff_stats.as_bar(scale))
             if num_files > 0 or not quiet:
                 if comment:
                     string += '#'
@@ -266,6 +270,20 @@ def _file_path_fm_pair(pair, strip=lambda x: x):
         return strip(before)
     return None
 
+def _file_data_consistent_with_strip_one(pair):
+    strip = gen_strip_level_function(1)
+    get_path = lambda x: x if isinstance(x, str) else x.path
+    before = get_path(pair.before)
+    if not _is_non_null(before):
+        return None
+    after = get_path(pair.after)
+    if not _is_non_null(after):
+        return None
+    try:
+        return strip(before) == strip(after)
+    except TooMayStripLevels:
+        return False
+
 class FilePathPlus(object):
     ADDED = '+'
     EXTANT = ' '
@@ -294,8 +312,10 @@ class FilePathPlus(object):
 class Preamble(_Lines):
     subtypes = list()
     @staticmethod
-    def get_preamble_at(lines, index, raise_if_malformed):
+    def get_preamble_at(lines, index, raise_if_malformed, exclude_subtypes_in=set()):
         for subtype in Preamble.subtypes:
+            if subtype in exclude_subtypes_in:
+                continue
             preamble, next_index = subtype.get_preamble_at(lines, index, raise_if_malformed)
             if preamble is not None:
                 return (preamble, next_index)
@@ -347,7 +367,7 @@ class GitPreamble(Preamble):
         'rename to' : re.compile('^(rename to)\s+({0})$'.format(_PATH_RE_STR)),
         'similarity index' : re.compile('^(similarity index)\s+((\d*)%)$'),
         'dissimilarity index' : re.compile('^(dissimilarity index)\s+((\d*)%)$'),
-        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+) (\d*))$'),
+        'index' : re.compile('^(index)\s+(([a-fA-F0-9]+)..([a-fA-F0-9]+)( (\d*))?)$'),
     }
     @staticmethod
     def get_preamble_at(lines, index, raise_if_malformed):
@@ -366,6 +386,7 @@ class GitPreamble(Preamble):
                     extras[match.group(1)] = match.group(2)
                     next_index += 1
                     found = True
+                    break
             if not found:
                 break
         return (GitPreamble(lines[index:next_index], _PAIR(file1, file2), extras), next_index)
@@ -395,7 +416,7 @@ class DiffPreamble(Preamble):
     @staticmethod
     def get_preamble_at(lines, index, raise_if_malformed):
         match = DiffPreamble.CRE.match(lines[index])
-        if not match:
+        if not match or (match.group(1) and match.group(1).find('--git') != -1):
             return (None, index)
         file1 = match.group(3) if match.group(3) else match.group(4)
         file2 = match.group(6) if match.group(6) else match.group(7)
@@ -417,9 +438,9 @@ class IndexPreamble(Preamble):
         match = IndexPreamble.FILE_RCE.match(lines[index])
         if not match:
             return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
+        filepath = match.group(2) if match.group(2) else match.group(3)
         next_index = index + (2 if (index + 1) < len(lines) and IndexPreamble.SEP_RCE.match(lines[index + 1]) else 1)
-        return (IndexPreamble(lines[index:next_index], filename), next_index)
+        return (IndexPreamble(lines[index:next_index], filepath), next_index)
     def __init__(self, lines, file_data, extras=None):
         Preamble.__init__(self, 'index', lines=lines, file_data=file_data, extras=extras)
     def get_file_path(self, strip_level=0):
@@ -434,9 +455,12 @@ class Preambles(list):
     @staticmethod
     def get_preambles_at(lines, index, raise_if_malformed):
         preambles = Preambles()
+        # make sure we don't get more than one preeample of the same type
+        already_seen = set()
         while index < len(lines):
-            preamble, index = Preamble.get_preamble_at(lines, index, raise_if_malformed)
+            preamble, index = Preamble.get_preamble_at(lines, index, raise_if_malformed, exclude_subtypes_in=already_seen)
             if preamble:
+                already_seen.add(type(preamble))
                 preambles.append(preamble)
             else:
                 break
@@ -452,6 +476,10 @@ class Preambles(list):
     def parse_text(text):
         '''Parse text and return a valid Preambles list or raise exception'''
         return DiffPlus.parse_lines(text.splitlines(True))
+    def __init__(self, preambles=None):
+        if preambles is not None:
+            for preamble in preambles:
+                self.append(preamble)
     def __str__(self):
         return ''.join([str(preamble) for preamble in self])
     def get_types(self):
@@ -492,6 +520,18 @@ class Preambles(list):
                 return expaths[key]
         return None
 
+class DiffHunk(_Lines):
+    def __init__(self, lines, before, after):
+        _Lines.__init__(self, lines)
+        self.before = before
+        self.after = after
+    def get_diffstat_stats(self):
+        return DiffStat.Stats()
+    def fix_trailing_whitespace(self):
+        return list()
+    def report_trailing_whitespace(self):
+        return list()
+
 class Diff(object):
     subtypes = list()
     @staticmethod
@@ -499,8 +539,8 @@ class Diff(object):
         match = cre.match(lines[index])
         if not match:
             return (None, index)
-        filename = match.group(2) if match.group(2) else match.group(3)
-        return (_FILE_AND_TS(filename, match.group(4)), index + 1)
+        filepath = match.group(2) if match.group(2) else match.group(3)
+        return (_FILE_AND_TS(filepath, match.group(4)), index + 1)
     @staticmethod
     def _get_diff_at(subtype, lines, start_index, raise_if_malformed=False):
         '''generic function that works for unified and context diffs'''
@@ -541,7 +581,7 @@ class Diff(object):
         diff, index = Diff.get_diff_at(lines, 0, raise_if_malformed=True)
         if not diff or index < len(lines):
             raise ParseError('Not a valid diff.')
-        return plus
+        return diff
     @staticmethod
     def parse_text(text):
         '''Parse text and return a valid DiffPlus or raise exception'''
@@ -551,17 +591,6 @@ class Diff(object):
         self.diff_type = diff_type
         self.file_data = file_data
         self.hunks = list() if hunks is None else hunks
-    class Hunk(_Lines):
-        def __init__(self, lines, before, after):
-            _Lines.__init__(self, lines)
-            self.before = before
-            self.after = after
-        def get_diffstat_stats(self):
-            return DiffStat.Stats()
-        def fix_trailing_whitespace(self):
-            return list()
-        def report_trailing_whitespace(self):
-            return list()
     def __str__(self):
         return str(self.header) + ''.join([str(hunk) for hunk in self.hunks])
     def fix_trailing_whitespace(self):
@@ -596,6 +625,40 @@ class Diff(object):
         else:
             return None
 
+class UnifiedDiffHunk(DiffHunk):
+    def __init__(self, lines, before, after):
+        DiffHunk.__init__(self, lines, before, after)
+    def _process_tws(self, fix=False):
+        bad_lines = list()
+        after_count = 0
+        for index in range(len(self.lines)):
+            if self.lines[index].startswith('+'):
+                after_count += 1
+                repl_line = _trim_trailing_ws(self.lines[index])
+                if len(repl_line) != len(self.lines[index]):
+                    bad_lines.append(str(self.after.start + after_count - 1))
+                    if fix:
+                        self.lines[index] = repl_line
+            elif self.lines[index].startswith(' '):
+                after_count += 1
+            elif DEBUG and not self.lines[index].startswith('-'):
+                raise Bug('Unexpected end of unified diff hunk.')
+        return bad_lines
+    def get_diffstat_stats(self):
+        stats = DiffStat.Stats()
+        for index in range(len(self.lines)):
+            if self.lines[index].startswith('-'):
+                stats.incr('deleted')
+            elif self.lines[index].startswith('+'):
+                stats.incr('inserted')
+            elif DEBUG and not self.lines[index].startswith(' '):
+                raise Bug('Unexpected end of unified diff hunk.')
+        return stats
+    def fix_trailing_whitespace(self):
+        return self._process_tws(fix=True)
+    def report_trailing_whitespace(self):
+        return self._process_tws(fix=False)
+
 class UnifiedDiff(Diff):
     BEFORE_FILE_CRE = re.compile('^--- ({0})(\s+{1})?(.*)$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
     AFTER_FILE_CRE = re.compile('^\+\+\+ ({0})(\s+{1})?(.*)$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
@@ -625,54 +688,61 @@ class UnifiedDiff(Diff):
                 elif lines[index].startswith(' '):
                     before_count += 1
                     after_count += 1
-                else:
+                elif not lines[index].startswith('\\'):
                     raise ParseError('Unexpected end of unified diff hunk.', index)
+                index += 1
+            if index < len(lines) and lines[index].startswith('\\'):
                 index += 1
         except IndexError:
             raise ParseError('Unexpected end of patch text.')
         before_chunk = _CHUNK(int(match.group(1)), before_length)
         after_chunk = _CHUNK(int(match.group(4)), after_length)
-        return (UnifiedDiff.Hunk(lines[start_index:index], before_chunk, after_chunk), index)
+        return (UnifiedDiffHunk(lines[start_index:index], before_chunk, after_chunk), index)
     @staticmethod
     def get_diff_at(lines, start_index, raise_if_malformed=False):
         return Diff._get_diff_at(UnifiedDiff, lines, start_index, raise_if_malformed)
     def __init__(self, lines, file_data, hunks):
         Diff.__init__(self, 'unified', lines, file_data, hunks)
-    class Hunk(Diff.Hunk):
-        def __init__(self, lines, before, after):
-            Diff.Hunk.__init__(self, lines, before, after)
-        def _process_tws(self, fix=False):
-            bad_lines = list()
-            after_count = 0
-            for index in range(len(self.lines)):
-                if self.lines[index].startswith('+'):
-                    after_count += 1
-                    repl_line = _trim_trailing_ws(self.lines[index])
-                    if len(repl_line) != len(self.lines[index]):
-                        bad_lines.append(str(self.after.start + after_count - 1))
-                        if fix:
-                            self.lines[index] = repl_line
-                elif self.lines[index].startswith(' '):
-                    after_count += 1
-                elif DEBUG and not self.lines[index].startswith('-'):
-                    raise Bug('Unexpected end of unified diff hunk.')
-            return bad_lines
-        def get_diffstat_stats(self):
-            stats = DiffStat.Stats()
-            for index in range(len(self.lines)):
-                if self.lines[index].startswith('-'):
-                    stats.incr('deleted')
-                elif self.lines[index].startswith('+'):
-                    stats.incr('inserted')
-                elif DEBUG and not self.lines[index].startswith(' '):
-                    raise Bug('Unexpected end of unified diff hunk.')
-            return stats
-        def fix_trailing_whitespace(self):
-            return self._process_tws(fix=True)
-        def report_trailing_whitespace(self):
-            return self._process_tws(fix=False)
 
 Diff.subtypes.append(UnifiedDiff)
+
+class ContextDiffHunk(DiffHunk):
+    def __init__(self, lines, before, after):
+        DiffHunk.__init__(self, lines, before, after)
+    def _process_tws(self, fix=False):
+        bad_lines = list()
+        for index in range(self.after.offset + 1, self.after.offset + self.after.numlines):
+            if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
+                repl_line = self.lines[index][:2] + _trim_trailing_ws(self.lines[index][2:])
+                after_count = index - (self.after.offset + 1)
+                if len(repl_line) != len(self.lines[index]):
+                    bad_lines.append(str(self.after.start + after_count))
+                    if fix:
+                        self.lines[index] = repl_line
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff hunk.')
+        return bad_lines
+    def get_diffstat_stats(self):
+        stats = DiffStat.Stats()
+        for index in range(self.before.offset + 1, self.before.offset + self.before.numlines):
+            if self.lines[index].startswith('- '):
+                stats.incr('deleted')
+            elif self.lines[index].startswith('! '):
+                stats.incr('modified')
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff "before" hunk.')
+        for index in range(self.after.offset + 1, self.after.offset + self.after.numlines):
+            if self.lines[index].startswith('+ '):
+                stats.incr('inserted')
+            elif self.lines[index].startswith('! '):
+                stats.incr('modified')
+            elif DEBUG and not self.lines[index].startswith('  '):
+                raise Bug('Unexpected end of context diff "after" hunk.')
+        return stats
+    def fix_trailing_whitespace(self):
+        return self._process_tws(fix=True)
+    def report_trailing_whitespace(self):
+        return self._process_tws(fix=False)
 
 class ContextDiff(Diff):
     BEFORE_FILE_CRE = re.compile('^\*\*\* ({0})(\s+{1})?$'.format(_PATH_RE_STR, _EITHER_TS_RE_STR))
@@ -727,64 +797,33 @@ class ContextDiff(Diff):
                 before_count += 1
                 index += 1
             if after_chunk is None:
+                if lines[index].startswith('\ '):
+                    before_count += 1
+                    index += 1
                 after_start_index = index
                 after_chunk, index = ContextDiff._get_after_chunk_at(lines, index)
                 if after_chunk is None:
                     raise ParseError('Failed to find context diff "after" hunk.', index)
             while after_count < after_chunk.length:
-                if not (lines[index].startswith('! ') or lines[index].startswith('+ ') or lines[index].startswith('  ')):
+                if not lines[index].startswith(('! ', '+ ', '  ')):
                     if after_count == 0:
                         break
                     raise ParseError('Unexpected end of context diff hunk.', index)
+                after_count += 1
+                index += 1
+            if lines[index].startswith('\ '):
                 after_count += 1
                 index += 1
         except IndexError:
             raise ParseError('Unexpected end of patch text.')
         before_hunk = _HUNK(before_start_index - start_index, before_chunk.start, before_chunk.length, after_start_index - before_start_index)
         after_hunk = _HUNK(after_start_index - start_index, after_chunk.start, after_chunk.length, index - after_start_index)
-        return (ContextDiff.Hunk(lines[start_index:index], before_hunk, after_hunk), index)
+        return (ContextDiffHunk(lines[start_index:index], before_hunk, after_hunk), index)
     @staticmethod
     def get_diff_at(lines, start_index, raise_if_malformed=False):
         return Diff._get_diff_at(ContextDiff, lines, start_index, raise_if_malformed)
     def __init__(self, lines, file_data, hunks):
         Diff.__init__(self, 'context', lines, file_data, hunks)
-    class Hunk(Diff.Hunk):
-        def __init__(self, lines, before, after):
-            Diff.Hunk.__init__(self, lines, before, after)
-        def _process_tws(self, fix=False):
-            bad_lines = list()
-            for index in range(self.after.offset + 1, self.after.offset + self.after.numlines):
-                if self.lines[index].startswith('+ ') or self.lines[index].startswith('! '):
-                    repl_line = self.lines[index][:2] + _trim_trailing_ws(self.lines[index][2:])
-                    after_count = index - (self.after.offset + 1)
-                    if len(repl_line) != len(self.lines[index]):
-                        bad_lines.append(str(self.after.start + after_count))
-                        if fix:
-                            self.lines[index] = repl_line
-                elif DEBUG and not self.lines[index].startswith('  '):
-                    raise Bug('Unexpected end of context diff hunk.')
-            return bad_lines
-        def get_diffstat_stats(self):
-            stats = DiffStat.Stats()
-            for index in range(self.before.offset + 1, self.before.offset + self.before.numlines):
-                if self.lines[index].startswith('- '):
-                    stats.incr('deleted')
-                elif self.lines[index].startswith('! '):
-                    stats.incr('modified')
-                elif DEBUG and not self.lines[index].startswith('  '):
-                    raise Bug('Unexpected end of context diff "before" hunk.')
-            for index in range(self.after.offset + 1, self.after.offset + self.after.numlines):
-                if self.lines[index].startswith('+ '):
-                    stats.incr('inserted')
-                elif self.lines[index].startswith('! '):
-                    stats.incr('modified')
-                elif DEBUG and not self.lines[index].startswith('  '):
-                    raise Bug('Unexpected end of context diff "after" hunk.')
-            return stats
-        def fix_trailing_whitespace(self):
-            return self._process_tws(fix=True)
-        def report_trailing_whitespace(self):
-            return self._process_tws(fix=False)
 
 Diff.subtypes.append(ContextDiff)
 
@@ -817,14 +856,20 @@ class DiffPlus(object):
     def parse_text(text):
         '''Parse text and return a valid DiffPlus or raise exception'''
         return DiffPlus.parse_lines(text.splitlines(True))
-    def __init__(self, preambles=None, diff=None):
-        self.preambles = Preambles() if preambles is None else preambles
+    def __init__(self, preambles=None, diff=None, trailing_junk=None):
+        self.preambles = preambles if isinstance(preambles, Preambles) else Preambles(preambles)
         self.diff = diff
-        self.trailing_junk = _Lines()
+        self.trailing_junk = _Lines(trailing_junk)
         if DEBUG:
             assert isinstance(self.preambles, Preambles) and (self.diff is None or isinstance(self.diff, Diff))
     def __str__(self):
-        return str(self.preambles) + str(self.diff) + str(self.trailing_junk)
+        if self.diff is not None:
+            return str(self.preambles) + str(self.diff) + str(self.trailing_junk)
+        else:
+            return str(self.preambles) + str(self.trailing_junk)
+    def get_preamble_for_type(self, preamble_type):
+        index = self.preambles.get_index_for_type(preamble_type)
+        return None if index is None else self.preambles[index]
     def fix_trailing_whitespace(self):
         if self.diff is None:
             return []
@@ -879,9 +924,37 @@ class Patch(object):
         return patch
     @staticmethod
     def parse_text(text, num_strip_levels=0):
-        '''Parse text and return a Patch instance'''
+        '''Parse text and return a Patch instance.'''
         return Patch.parse_lines(text.splitlines(True), num_strip_levels=num_strip_levels)
+    @staticmethod
+    def parse_email_text(text, num_strip_levels=0):
+        '''Parse email text and return a Patch instance.'''
+        msg = email.message_from_string(text)
+        subject = msg.get('Subject')
+        if subject:
+            # email may have inapproriate newlines (and they play havoc with REs) so fix them
+            text = re.sub('\r\n', os.linesep, msg.get_payload())
+        else:
+            text = msg.get_payload()
+        patch = parse_text(text, num_strip_levels=num_strip_levels)
+        if subject:
+            descr = patch.get_description()
+            patch.set_description('\n'.join([subject, descr]))
+        return patch
+    @staticmethod
+    def parse_text_file(filepath, num_strip_levels=0):
+        '''Parse a text file and return a Patch instance.'''
+        patch = Patch.parse_text(open(filepath).read(), num_strip_levels=num_strip_levels)
+        patch.source_name = filepath
+        return patch
+    @staticmethod
+    def parse_email_file(filepath, num_strip_levels=0):
+        '''Parse a text file and return a Patch instance.'''
+        patch = Patch.parse_email_text(open(filepath).read(), num_strip_levels=num_strip_levels)
+        patch.source_name = filepath
+        return patch
     def __init__(self, num_strip_levels=0):
+        self.source_name = None
         self.num_strip_levels = int(num_strip_levels)
         self.header = Header()
         self.diff_pluses = list()
@@ -889,6 +962,37 @@ class Patch(object):
         return int(strip_level) if strip_level is not None else self.num_strip_levels
     def set_strip_level(self, strip_level):
         self.num_strip_levels = int(strip_level)
+    def estimate_strip_level(self):
+        trues = 0
+        for diff_plus in self.diff_pluses:
+            if diff_plus.preambles.get_index_for_type('git') is not None:
+                # git patches will always have a strip level of 1
+                return 1
+            check = _file_data_consistent_with_strip_one(diff_plus.diff.file_data)
+            if check is True:
+                trues += 1
+            elif check is False:
+                return 0
+        return 1 if trues > 0 else None
+    def check_relevance(self, strip_level=None, path=None):
+        relevance = collections.namedtuple('relevance', ['goodness', 'missing', 'unexpected'])
+        fpath = (lambda fp: fp) if path is None else lambda fp: os.path.join(path, fp)
+        missing = list()
+        unexpected = list()
+        fpluses = self.get_file_paths_plus(strip_level)
+        for fplus in fpluses:
+            fppath = fpath(fplus.path)
+            exists = os.path.exists(fppath)
+            if fplus.status == FilePathPlus.ADDED:
+                num_created += 1
+                if exists:
+                    unexpected.append(fppath)
+            else:
+                num_expected += 1
+                if not exists:
+                    missing.append(fppath)
+        badness = 100 if len(fpluses) == 0 else (100 * len(missing) * len(unexpected)) / len(fpluses)
+        return relevance(goodness=100-badness, missing=missing, unexpected=unexpected)
     def get_header(self):
         return self.header
     def set_header(self, text):
