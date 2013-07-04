@@ -1,4 +1,5 @@
-QUILTTESTDIR=$(HOME)/WSRC/quilt/test
+QUILT_BASE_DIR=$(HOME)/XSRC/GIT/quilt
+QUILTTESTDIR=$(QUILT_BASE_DIR)/test
 TESTDIR=quilt-test
 QUILTTESTS :=	$(filter-out $(QUILTTESTDIR)/patch-wrapper.test,$(wildcard $(QUILTTESTDIR)/*.test))
 TESTS := $(patsubst $(QUILTTESTDIR)/%.test, $(TESTDIR)/%.test, $(QUILTTESTS))
@@ -32,6 +33,7 @@ $(TESTDIR)/.%.ok : $(TESTDIR)/%.test
 	export LANG LC_ALL;						\
 	$(CHECK_ENV);							\
 	cd $(@D);							\
+	export QUILT_DIR=$(QUILT_BASE_DIR)/quilt;	\
 	$(QUILTTESTDIR)/run -q $(<F)
 	@touch $@
 
