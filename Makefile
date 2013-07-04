@@ -21,6 +21,9 @@ check-% : $(TESTDIR)/.%.ok
 $(TESTDIR):
 	mkdir $(TESTDIR) 2> /dev/null
 
+$(TESTDIR)/delete.test: $(QUILTTESTDIR)/delete.test
+	sed -e "s/$$ *quilt/$$ pyquilt/" -e "s/find: \`?\./dir'?: Permission denied/.pc/test3/dir: Permission denied/" < $^ > $@
+
 $(TESTDIR)/%.test: $(QUILTTESTDIR)/%.test
 	sed -e "s/$$ *quilt/$$ pyquilt/" < $^ > $@
 
