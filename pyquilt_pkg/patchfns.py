@@ -523,8 +523,9 @@ def remove_from_db(patch):
 
 def find_patch_file(name):
     """Find the patch file with the given name"""
-    if os.path.exists(name) and os.access(name, os.R_OK):
-        return name
+    rname = filename_rel_base(name)
+    if os.path.exists(rname) and os.access(rname, os.R_OK):
+        return rname
     output.set_swallow_errors(True)
     patch = find_patch_in_series(name)
     output.set_swallow_errors(False)

@@ -121,8 +121,8 @@ def run_import(args):
     before = patchfns.patch_after(patchfns.top_patch())
     for patch_file in args.patchfiles:
         patch = args.opt_patch if args.opt_patch else os.path.basename(patch_file)
-        patch_file = patchfns.find_patch_file(patch_file)
-        if not patch_file:
+        patch_file_name = patchfns.find_patch_file(patch_file)
+        if not patch_file_name:
             return cmd_result.ERROR
         merged = False
         if patchfns.is_applied(patch):
@@ -130,14 +130,14 @@ def run_import(args):
             return cmd_result.ERROR
         dest = patchfns.patch_file_name(patch)
         if patchfns.patch_in_series(patch):
-            if patch_file == dest:
+            if patch_file_name == dest:
                 output.error('Patch %s already exists in series.\n' % patchfns.print_patch(patch))
                 return cmd_result.ERROR
             if not args.opt_force:
                 output.error('Patch %s exists. Replace with -f.\n' % patchfns.print_patch(patch))
                 return cmd_result.ERROR_SUGGEST_FORCE
             if args.opt_desc != 'n':
-                merged_patch = merge_patches(dest, patch_file, args.opt_desc)
+                merged_patch = merge_patches(dest, patch_file_name, args.opt_desc)
                 if merged_patch is False:
                     return cmd_result.ERROR
                 merged = True
@@ -154,7 +154,7 @@ def run_import(args):
                 fsutils.set_file_contents(dest, merged_patch)
             else:
                 # just in case dest == patch_file do it this way
-                text = fsutils.get_file_contents(patch_file)
+                text = fsutils.get_file_contents(patch_file_name)
                 fsutils.set_file_contents(dest, text)
         except IOError as edata:
             output.error('Failed to import patch %s\n' % patchfns.print_patch(patch))
