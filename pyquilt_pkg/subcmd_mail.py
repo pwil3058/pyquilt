@@ -189,6 +189,14 @@ def format_address(display, address, charset):
         display = encode_display(display, charset)
     return email.utils.formataddr((display, address))
 
+def get_login_name():
+    try:
+        default_login_name = os.getlogin()
+    except OSError:
+        import pwd
+        default_login_name = pwd.getpwuid(os.getuid())[0]
+    return os.getenv('LOGNAME', default_login_name)
+
 def message_from_patch(text, charset):
     header = putils.get_patch_hdr_fm_text(text)
     subject = email.message_from_string(header)['Subject']
@@ -242,7 +250,7 @@ def message_from_patch(text, charset):
             tos.append(line[3:])
         elif line.startswith('Cc:') or line.startswith('Signed-off-by:') or line.startswith('Acked-by:'):
             ccs.append(line[line.index(':') + 1:])
-    logname_ptn = os.getenv('LOGNAME', os.getlogin()) + '@'
+    logname_ptn = get_login_name() + '@'
     for item in tos:
         display, address = email.utils.parseaddr(item)
         if address and not address.startswith(logname_ptn):
@@ -350,7 +358,7 @@ def run_mail(args):
                 return cmd_result.ERROR
     if not args.opt_sender:
         hostname = socket.gethostname()
-        args.opt_sender = '%s@%s' % (os.getenv('LOGNAME', os.getlogin()), hostname)
+        args.opt_sender = '%s@%s' % (get_login_name(), hostname)
         if not re.match('^\S+@\S+\.\S+$', args.opt_sender):
             output.error('Could not determine the envelope sender address. Please use --sender.\n')
             return cmd_result.ERROR
