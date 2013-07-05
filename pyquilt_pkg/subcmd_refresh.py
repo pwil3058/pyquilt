@@ -225,32 +225,32 @@ def run_refresh(args):
             continue
         else:
             patch_content += result.stdout
-    if not patch_content:
-        output.error('Nothing in patch %s\n' % patchfns.print_patch(patch))
-        return clean_up(cmd_result.ERROR)
-    if files_were_shadowed:
-        if not args.opt_force:
-            output.error('More recent patches modify files in patch %s. Enforce refresh with -f.\n' % patchfns.print_patch(patch))
-            return clean_up(cmd_result.ERROR_SUGGEST_FORCE)
-        if args.opt_strip_trailing_whitespace:
-            output.error('Cannot use --strip-trailing-whitespace on a patch that has shadowed files.\n')
-    if args.opt_strip_trailing_whitespace and not files_were_shadowed:
-        result = putils.remove_trailing_ws(patch_content, num_strip_level)
-        if result.eflags == cmd_result.OK:
-            patch_content = result.stdout
-        if result.stderr:
-            output.error(result.stderr)
-    else:
-        result = putils.remove_trailing_ws(patch_content, num_strip_level, dry_run=True)
-        if result.stderr:
-            output.error(result.stderr)
     patch_file = patchfns.patch_file_name(patch)
     prev_patch_file = patch_file if os.path.isfile(patch_file) else '/dev/null'
     result_content = patchfns.patch_header(prev_patch_file)
-    if args.opt_diffstat:
-        diffstat_text = diffstat.get_diffstat(patch_content, num_strip_level)
-        result_content += diffstat_text
-    result_content += patch_content
+    if not patch_content:
+        output.error('Nothing in patch %s\n' % patchfns.print_patch(patch))
+    else:
+        if files_were_shadowed:
+            if not args.opt_force:
+                output.error('More recent patches modify files in patch %s. Enforce refresh with -f.\n' % patchfns.print_patch(patch))
+                return clean_up(cmd_result.ERROR_SUGGEST_FORCE)
+            if args.opt_strip_trailing_whitespace:
+                output.error('Cannot use --strip-trailing-whitespace on a patch that has shadowed files.\n')
+        if args.opt_strip_trailing_whitespace and not files_were_shadowed:
+            result = putils.remove_trailing_ws(patch_content, num_strip_level)
+            if result.eflags == cmd_result.OK:
+                patch_content = result.stdout
+            if result.stderr:
+                output.error(result.stderr)
+        else:
+            result = putils.remove_trailing_ws(patch_content, num_strip_level, dry_run=True)
+            if result.stderr:
+                output.error(result.stderr)
+        if args.opt_diffstat:
+            diffstat_text = diffstat.get_diffstat(patch_content, num_strip_level)
+            result_content += diffstat_text
+        result_content += patch_content
     patch_file_dir = os.path.dirname(patch_file)
     if not os.path.exists(patch_file_dir):
         os.makedirs(patch_file_dir)
@@ -282,7 +282,7 @@ def run_refresh(args):
                 output.error('Failed to create patch %s\n' % patchfns.print_patch(patch))
                 return clean_up(cmd_result.ERROR)
             output.write('Fork of patch %s created as %s\n' % (patchfns.print_patch(old_patch), patchfns.print_patch(patch)))
-        elif is_ok:
+        elif is_ok and patch_content:
             output.write('Refreshed patch %s\n' % patchfns.print_patch(patch))
         fsutils.touch(os.path.join(QUILT_PC, patch, '.timestamp'))
     if is_ok:
@@ -290,6 +290,6 @@ def run_refresh(args):
         if os.path.exists(tagf):
             os.remove(tagf)
         is_ok = patchfns.change_db_strip_level('-p%s' % num_strip_level, patch)
-    return clean_up(cmd_result.OK if is_ok else cmd_result.ERROR)
+    return clean_up(cmd_result.OK if is_ok and patch_content else cmd_result.ERROR)
 
 parser.set_defaults(run_cmd=run_refresh)
