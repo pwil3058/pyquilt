@@ -61,6 +61,24 @@ parser.add_argument(
     metavar='{specfile|seriesfile}'
 )
 
+def check_for_existing_directories(args, script):
+    status=False
+    dircty_set = set()
+    for action in script:
+        if action[0] == 'patch':
+            if args.prefix:
+                dircty_set.add(os.path.join(args.prefix, action[1]))
+            else:
+                dircty_set.add(action[1])
+    last_dir = None
+    for dircty in dircty_set:
+        if dircty == ".":
+            continue
+        if os.path.exists(dircty):
+            output.error('Directory %s exists\n' % dircty)
+            status = True
+    return status
+
 def check_for_existing_files(args, script):
     status=False
     dircty_set = set()
@@ -76,7 +94,7 @@ def check_for_existing_files(args, script):
             output.error('Directory %s exists\n' % patch_dir)
             status = True
         series_file = os.path.join(dircty, patchfns.QUILT_SERIES)
-        if os.path.exists(patch_dir):
+        if os.path.exists(series_file):
             output.error('File %s exists\n' % series_file)
             status = True
     return status
@@ -117,7 +135,7 @@ def run_setup(args):
                 pass
             else:
                 script.append(('patch', patch_dir, line.rstrip()))
-    if check_for_existing_files(args, script):
+    if check_for_existing_directories(args, script):
         return cmd_result.ERROR
     for action in script:
         if action[0] == 'tar':
@@ -140,6 +158,12 @@ def run_setup(args):
             else:
                 output.error('%s: is not a supported tar format\n' % tarball)
                 return cmd_result.ERROR
+    if check_for_existing_files(args, script):
+        output.error("Trying alternative patches and series names...\n")
+        patchfns.QUILT_PATCHES = "quilt_patches"
+        patchfns.QUILT_SERIES = "quilt_series"
+        if check_for_existing_files(args, script):
+            return cmd_result.ERROR
     tar_dir = tar_file = None
     for action in script:
         if action[0] == 'tar':
