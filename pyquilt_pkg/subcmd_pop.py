@@ -97,7 +97,7 @@ def list_patches(number=None, stop_at_patch=None):
     patches = patchfns.applied_patches()
     patches.reverse()
     if stop_at_patch is not None:
-        number = patches.index(stop_at_patch) + 1
+        number = patches.index(stop_at_patch)
     if number is not None and number < len(patches):
         return patches[:number]
     return patches
@@ -198,7 +198,7 @@ def run_pop(args):
         if args.patchnamornum.isdigit():
             number = int(args.patchnamornum)
         else:
-            stop_at_patch = patchfns.find_unapplied_patch(args.patchnamornum)
+            stop_at_patch = patchfns.find_applied_patch(args.patchnamornum)
             if not stop_at_patch:
                 return cmd_result.ERROR
     elif not args.opt_all:
