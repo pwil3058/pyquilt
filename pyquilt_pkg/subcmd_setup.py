@@ -175,6 +175,7 @@ def run_setup(args):
                 patches_dir = os.path.join(args.prefix, patches_dir)
             if not os.path.exists(patches_dir):
                 create_symlink(args.sourcedir, patches_dir)
+                patchfns.create_db(os.path.dirname(patches_dir))
             this_series_file = os.path.join(action[1], patchfns.QUILT_SERIES)
             if args.prefix:
                 this_series_file = os.path.join(args.prefix, this_series_file)

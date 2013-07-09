@@ -139,7 +139,10 @@ def chdir_to_base_dir(skip_version_check=False):
         output.error('The working tree was created by an older version of quilt. Please run "quilt upgrade".\n')
         sys.exit(cmd_result.ERROR)
 
-def create_db():
+def create_db(dirpath=None):
+    if dirpath is not None:
+        saved_dir = os.getcwd()
+        os.chdir(dirpath)
     if not os.path.isdir(QUILT_PC):
         if os.path.exists(QUILT_PC):
             output.error('%s is not a directory.\n' % QUILT_PC)
@@ -154,6 +157,8 @@ def create_db():
         open(os.path.join(QUILT_PC, '.quilt_patches'), 'w').write(QUILT_PATCHES + '\n')
     if not os.path.isfile(os.path.join(QUILT_PC, '.quilt_series')):
         open(os.path.join(QUILT_PC, '.quilt_series'), 'w').write(QUILT_SERIES + '\n')
+    if dirpath is not None:
+        os.chdir(saved_dir)
 
 def quote_bre(string):
     'Quote a string for use in a basic regular expression.'
